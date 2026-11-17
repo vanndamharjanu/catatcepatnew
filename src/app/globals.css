@@ -1,0 +1,138 @@
+@import "tailwindcss";
+
+:root {
+  --bg-canvas: #faf6f7;
+  --bg-card: #ffffff;
+  --bg-soft: #f6e9ed;
+  --bg-soft-hover: #eedbe1;
+  --border-subtle: #eadde1;
+  --text-primary: #1f0b10;
+  --text-muted: #694f56;
+  --brand-primary: #6e1128;
+  --brand-deep: #450918;
+  --brand-hover: #580d20;
+  --brand-ring: rgba(110, 17, 40, 0.35);
+  --income-text: #047857;
+  --income-bg: #ecfdf5;
+  --expense-text: #be123c;
+  --expense-bg: #fff1f2;
+  --nav-bg: rgba(255, 255, 255, 0.96);
+}
+
+html.dark {
+  --bg-canvas: #160b0f;
+  --bg-card: #221117;
+  --bg-soft: #311922;
+  --bg-soft-hover: #3e202b;
+  --border-subtle: #3d212b;
+  --text-primary: #faf3f5;
+  --text-muted: #c8b2b8;
+  --brand-primary: #8b1835;
+  --brand-deep: #550b1f;
+  --brand-hover: #9e1f3f;
+  --brand-ring: rgba(244, 114, 142, 0.45);
+  --income-text: #34d399;
+  --income-bg: rgba(4, 120, 87, 0.2);
+  --expense-text: #fda4af;
+  --expense-bg: rgba(190, 18, 60, 0.22);
+  --nav-bg: rgba(34, 17, 23, 0.96);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* R-39 Interaction affordances in base layer */
+a[href],
+button:not(:disabled),
+summary,
+select:not(:disabled),
+label[for],
+[role="button"]:not([aria-disabled="true"]),
+[role="tab"]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
+button:disabled,
+select:disabled,
+input:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+/* R-32 High-contrast keyboard focus ring across both themes */
+:focus-visible {
+  outline: 2.5px solid var(--brand-primary);
+  outline-offset: 2px;
+}
+
+html.dark :focus-visible {
+  outline-color: #f47292;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.hero-maroon-gradient {
+  background: linear-gradient(135deg, #6e1128 0%, #450918 100%);
+}
+
+html.dark .hero-maroon-gradient {
+  background: linear-gradient(135deg, #8b1835 0%, #4a0b1c 100%);
+}
+
+@keyframes sheetSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-sheet-up {
+  animation: sheetSlideUp 0.22s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+}

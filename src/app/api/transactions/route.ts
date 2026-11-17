@@ -1,0 +1,206 @@
+import { randomUUID } from "node:crypto";
+import { NextResponse } from "next/server";
+import { computeAccountBalances, formatRupiah, toIsoDate } from "@/lib/finance";
+import { syncTransactionsToSheet } from "@/lib/google-sheets";
+import { readDb, toPublicState, writeDb } from "@/lib/store";
+import type { Transaction, TransactionSource, TransactionType } from "@/lib/types";
+
+interface TransactionInput {
+  date?: string;
+  type?: TransactionType;
+  category?: string;
+  accountId?: string;
+  toAccountId?: string;
+  amount?: number;
+  note?: string;
+  source?: TransactionSource;
+}
+
+function validateTxInput(raw: TransactionInput, fallbackAccountId: string): Omit<Transaction, "id" | "createdAt" | "updatedAt" | "sheetSyncStatus"> | null {
+  const amount = Math.round(Number(raw.amount) || 0);
+  if (amount <= 0) return null;
+  const date = raw.date && /^\d{4}-\d{2}-\d{2}$/.test(raw.date)
+    ? raw.date
+    : toIsoDate();
+  const type: TransactionType =
+    raw.type === "Masuk" || raw.type === "Transfer" || raw.type === "Koreksi"
+      ? raw.type
+      : "Keluar";
+
+  return {
+    date,
+    type,
+    category: (raw.category || (type === "Transfer" ? "Transfer Akun" : "Lain-lain")).trim(),
+    accountId: raw.accountId || fallbackAccountId,
+    toAccountId: type === "Transfer" ? raw.toAccountId : undefined,
+    amount,
+    note: (raw.note || "").trim().slice(0, 200),
+    source: raw.source || "manual",
+  };
+}
+
+async function tryAutoSync(db: ReturnType<typeof readDb>) {
+  if (!db.sheetConnection.connected) return;
+  try {
+    await syncTransactionsToSheet(db.sheetConnection, db.transactions, db.accounts);
+    db.transactions = db.transactions.map((tx) => ({ ...tx, sheetSyncStatus: "synced" }));
+    db.sheetConnection.lastSyncedAt = new Date().toISOString();
+    db.sheetConnection.lastError = undefined;
+  } catch (err) {
+    db.sheetConnection.lastError =
+      err instanceof Error ? err.message : "Gagal sinkronisasi ke Google Sheets";
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const body = (await request.json()) as {
+      action?: "reconcile";
+      actualBalance?: number;
+      items?: TransactionInput[];
+    } & TransactionInput;
+
+    const db = readDb();
+    const nowIso = new Date().toISOString();
+
+    if (body.action === "reconcile") {
+      const targetAccount = db.accounts.find((a) => a.id === body.accountId);
+      if (!targetAccount) {
+        return NextResponse.json({ error: "Pilih akun yang valid." }, { status: 400 });
+      }
+      const actualBalance = Math.round(Number(body.actualBalance));
+      if (!Number.isFinite(actualBalance) || actualBalance < 0) {
+        return NextResponse.json({ error: "Saldo asli harus berupa angka 0 atau lebih." }, { status: 400 });
+      }
+
+      const currentBalance =
+        computeAccountBalances(db.accounts, db.transactions).find((a) => a.id === targetAccount.id)
+          ?.balance ?? 0;
+      const diff = actualBalance - currentBalance;
+      if (diff === 0) {
+        return NextResponse.json(
+          { error: `Saldo ${targetAccount.name} sudah sesuai (${formatRupiah(currentBalance)}).` },
+          { status: 400 },
+        );
+      }
+
+      const reconciliationTx: Transaction = {
+        id: randomUUID(),
+        date: body.date && /^\d{4}-\d{2}-\d{2}$/.test(body.date) ? body.date : toIsoDate(),
+        type: "Koreksi",
+        category: diff > 0 ? "Koreksi Tambah" : "Koreksi Kurang",
+        accountId: targetAccount.id,
+        amount: Math.abs(diff),
+        note:
+          (body.note || "").trim().slice(0, 200) ||
+          `Koreksi ${targetAccount.name}: ${formatRupiah(currentBalance)} ke ${formatRupiah(actualBalance)}`,
+        source: "reconciliation",
+        sheetSyncStatus: db.sheetConnection.connected ? "pending" : "local_only",
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+
+      db.transactions.unshift(reconciliationTx);
+      await tryAutoSync(db);
+      writeDb(db);
+      return NextResponse.json(toPublicState(db), { status: 201 });
+    }
+
+    const rawList = Array.isArray(body.items) ? body.items : [body];
+    const fallbackAccountId = db.accounts[0]?.id || "acc-cash";
+
+    const created: Transaction[] = [];
+    for (const item of rawList) {
+      const valid = validateTxInput(item, fallbackAccountId);
+      if (!valid) continue;
+      created.push({
+        id: randomUUID(),
+        ...valid,
+        sheetSyncStatus: db.sheetConnection.connected ? "pending" : "local_only",
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      });
+    }
+
+    if (created.length === 0) {
+      return NextResponse.json(
+        { error: "Nominal transaksi harus lebih besar dari Rp 0." },
+        { status: 400 },
+      );
+    }
+
+    db.transactions = [...created, ...db.transactions];
+    await tryAutoSync(db);
+    writeDb(db);
+
+    return NextResponse.json(toPublicState(db), { status: 201 });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Gagal menyimpan transaksi." },
+      { status: 500 },
+    );
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const body = (await request.json()) as { id?: string } & TransactionInput;
+    if (!body.id) {
+      return NextResponse.json({ error: "ID transaksi wajib disertakan." }, { status: 400 });
+    }
+
+    const db = readDb();
+    const idx = db.transactions.findIndex((t) => t.id === body.id);
+    if (idx === -1) {
+      return NextResponse.json({ error: "Transaksi tidak ditemukan." }, { status: 404 });
+    }
+
+    const fallbackAccountId = db.accounts[0]?.id || "acc-cash";
+    const valid = validateTxInput(body, fallbackAccountId);
+    if (!valid) {
+      return NextResponse.json({ error: "Data transaksi tidak valid." }, { status: 400 });
+    }
+
+    db.transactions[idx] = {
+      ...db.transactions[idx],
+      ...valid,
+      sheetSyncStatus: db.sheetConnection.connected ? "pending" : "local_only",
+      updatedAt: new Date().toISOString(),
+    };
+
+    await tryAutoSync(db);
+    writeDb(db);
+    return NextResponse.json(toPublicState(db));
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Gagal memperbarui transaksi." },
+      { status: 500 },
+    );
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
+    if (!id) {
+      return NextResponse.json({ error: "Parameter id wajib diisi." }, { status: 400 });
+    }
+
+    const db = readDb();
+    const before = db.transactions.length;
+    db.transactions = db.transactions.filter((t) => t.id !== id);
+    if (db.transactions.length === before) {
+      return NextResponse.json({ error: "Transaksi tidak ditemukan." }, { status: 404 });
+    }
+
+    await tryAutoSync(db);
+    writeDb(db);
+    return NextResponse.json(toPublicState(db));
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Gagal menghapus transaksi." },
+      { status: 500 },
+    );
+  }
+}
