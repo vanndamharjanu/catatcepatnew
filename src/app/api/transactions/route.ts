@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { computeAccountBalances, formatRupiah, toIsoDate } from "@/lib/finance";
 import { syncTransactionsToSheet } from "@/lib/google-sheets";
 import { readDb, toPublicState, writeDb } from "@/lib/store";
-import type { Transaction, TransactionSource, TransactionType } from "@/lib/types";
+import type { Account, Transaction, TransactionSource, TransactionType } from "@/lib/types";
 
 interface TransactionInput {
   date?: string;
@@ -16,9 +16,11 @@ interface TransactionInput {
   source?: TransactionSource;
 }
 
-function validateTxInput(raw: TransactionInput, fallbackAccountId: string): Omit<Transaction, "id" | "createdAt" | "updatedAt" | "sheetSyncStatus"> | null {
+type ValidTx = Omit<Transaction, "id" | "createdAt" | "updatedAt" | "sheetSyncStatus">;
+
+function validateTxInput(raw: TransactionInput, accounts: Account[]): ValidTx | { error: string } {
   const amount = Math.round(Number(raw.amount) || 0);
-  if (amount <= 0) return null;
+  if (amount <= 0) return { error: "Nominal transaksi harus lebih besar dari Rp 0." };
   const date = raw.date && /^\d{4}-\d{2}-\d{2}$/.test(raw.date)
     ? raw.date
     : toIsoDate();
@@ -27,11 +29,24 @@ function validateTxInput(raw: TransactionInput, fallbackAccountId: string): Omit
       ? raw.type
       : "Keluar";
 
+  const accountId = raw.accountId || accounts[0]?.id;
+  if (!accountId || !accounts.some((a) => a.id === accountId)) {
+    return { error: "Akun transaksi tidak ditemukan." };
+  }
+  if (type === "Transfer") {
+    if (!raw.toAccountId || !accounts.some((a) => a.id === raw.toAccountId)) {
+      return { error: "Pilih akun tujuan transfer yang valid." };
+    }
+    if (raw.toAccountId === accountId) {
+      return { error: "Akun tujuan transfer harus berbeda dari akun asal." };
+    }
+  }
+
   return {
     date,
     type,
     category: (raw.category || (type === "Transfer" ? "Transfer Akun" : "Lain-lain")).trim(),
-    accountId: raw.accountId || fallbackAccountId,
+    accountId,
     toAccountId: type === "Transfer" ? raw.toAccountId : undefined,
     amount,
     note: (raw.note || "").trim().slice(0, 200),
@@ -107,12 +122,14 @@ export async function POST(request: Request) {
     }
 
     const rawList = Array.isArray(body.items) ? body.items : [body];
-    const fallbackAccountId = db.accounts[0]?.id || "acc-cash";
 
+    // All-or-nothing: one invalid row rejects the batch instead of silently dropping it.
     const created: Transaction[] = [];
     for (const item of rawList) {
-      const valid = validateTxInput(item, fallbackAccountId);
-      if (!valid) continue;
+      const valid = validateTxInput(item, db.accounts);
+      if ("error" in valid) {
+        return NextResponse.json({ error: valid.error }, { status: 400 });
+      }
       created.push({
         id: randomUUID(),
         ...valid,
@@ -123,10 +140,7 @@ export async function POST(request: Request) {
     }
 
     if (created.length === 0) {
-      return NextResponse.json(
-        { error: "Nominal transaksi harus lebih besar dari Rp 0." },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "Tidak ada transaksi untuk disimpan." }, { status: 400 });
     }
 
     db.transactions = [...created, ...db.transactions];
@@ -155,10 +169,9 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Transaksi tidak ditemukan." }, { status: 404 });
     }
 
-    const fallbackAccountId = db.accounts[0]?.id || "acc-cash";
-    const valid = validateTxInput(body, fallbackAccountId);
-    if (!valid) {
-      return NextResponse.json({ error: "Data transaksi tidak valid." }, { status: 400 });
+    const valid = validateTxInput(body, db.accounts);
+    if ("error" in valid) {
+      return NextResponse.json({ error: valid.error }, { status: 400 });
     }
 
     db.transactions[idx] = {

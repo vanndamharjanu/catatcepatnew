@@ -302,6 +302,53 @@ function summarizeByCategory(
     .sort((a, b) => b.amount - a.amount);
 }
 
+function parseIsoDate(iso: string): Date {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+/** Days elapsed in the period (start through min(end, today)), used as the daily-average divisor. */
+export function countElapsedDays(
+  scoped: Transaction[],
+  filter: PeriodFilter,
+  now: Date = new Date(),
+): number {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const earliest = () =>
+    scoped.length > 0
+      ? parseIsoDate(scoped.reduce((min, t) => (t.date < min ? t.date : min), scoped[0].date))
+      : today;
+
+  let start: Date;
+  let end: Date = today;
+
+  if (filter === "today") {
+    return 1;
+  } else if (filter === "week") {
+    start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - ((now.getDay() + 6) % 7));
+  } else if (filter === "month") {
+    start = new Date(today.getFullYear(), today.getMonth(), 1);
+  } else if (filter === "year") {
+    start = new Date(today.getFullYear(), 0, 1);
+  } else if (filter === "all") {
+    start = earliest();
+  } else if (filter.kind === "month") {
+    if (!/^\d{4}-\d{2}$/.test(filter.monthKey)) {
+      start = earliest();
+    } else {
+      const [y, m] = filter.monthKey.split("-").map(Number);
+      start = new Date(y, m - 1, 1);
+      end = new Date(y, m, 0);
+    }
+  } else {
+    start = filter.startDate ? parseIsoDate(filter.startDate) : earliest();
+    if (filter.endDate) end = parseIsoDate(filter.endDate);
+  }
+
+  if (end > today) end = today;
+  return Math.max(1, Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1);
+}
+
 /** Compute period KPIs, income/expense category breakdowns, and 12-month trend. */
 export function computePeriodMetrics(
   transactions: Transaction[],
@@ -335,13 +382,7 @@ export function computePeriodMetrics(
     }
   }
 
-  const activeDays =
-    filter === "today"
-      ? 1
-      : filter === "week"
-        ? ((now.getDay() + 6) % 7) + 1
-        : Math.max(1, now.getDate());
-  const dailyAverageExpense = Math.round(expense / activeDays);
+  const dailyAverageExpense = Math.round(expense / countElapsedDays(scoped, filter, now));
 
   // 12-month trend for target year (derived from monthKey year when selected, else current year)
   const monthLabels = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];

@@ -446,10 +446,20 @@ export function AppClient({ initialDb }: AppClientProps) {
   };
 
   const handleDeleteGoal = async (id: string) => {
+    const goal = db.goals.find((g) => g.id === id);
+    if (
+      !window.confirm(
+        `Hapus target "${goal?.name ?? ""}"? Semua setorannya ikut dihapus dan uangnya kembali ke saldo akun asal.`,
+      )
+    ) {
+      return;
+    }
     const res = await fetch(`/api/goals?id=${encodeURIComponent(id)}`, { method: "DELETE" });
     if (res.ok) {
       setDb((await res.json()) as AppDatabase);
       showToast("Target tabungan dihapus.");
+    } else {
+      setGlobalError("Gagal menghapus target tabungan.");
     }
   };
 

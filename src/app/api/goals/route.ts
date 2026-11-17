@@ -30,12 +30,16 @@ export async function POST(request: Request) {
       }
 
       goal.currentAmount += amount;
+      const accountId = body.accountId || db.accounts[0]?.id || "acc-cash";
+      if (!db.accounts.some((a) => a.id === accountId)) {
+        return NextResponse.json({ error: "Akun sumber setoran tidak ditemukan." }, { status: 400 });
+      }
       db.transactions.unshift({
         id: randomUUID(),
         date: toIsoDate(),
         type: "Keluar",
         category: "Tabungan",
-        accountId: body.accountId || db.accounts[0]?.id || "acc-cash",
+        accountId,
         amount,
         note: `Setor target: ${goal.name}`,
         goalId: goal.id,
@@ -96,6 +100,18 @@ export async function DELETE(request: Request) {
   }
   const db = readDb();
   db.goals = db.goals.filter((g) => g.id !== id);
+  // Deleting a goal cancels its deposits so the money returns to the source account balance.
+  const before = db.transactions.length;
+  db.transactions = db.transactions.filter((t) => t.goalId !== id);
+  if (db.transactions.length !== before && db.sheetConnection.connected) {
+    try {
+      await syncTransactionsToSheet(db.sheetConnection, db.transactions, db.accounts);
+      db.sheetConnection.lastSyncedAt = new Date().toISOString();
+    } catch (err) {
+      db.sheetConnection.lastError =
+        err instanceof Error ? err.message : "Gagal sinkron penghapusan target ke Sheets";
+    }
+  }
   writeDb(db);
   return NextResponse.json(toPublicState(db));
 }

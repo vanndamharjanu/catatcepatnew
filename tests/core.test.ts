@@ -5,9 +5,10 @@ import {
   computeDailyAllowance,
   computePeriodMetrics,
   computeStreak,
+  countElapsedDays,
 } from "../src/lib/finance.ts";
-import { parseLegacyCsv } from "../src/lib/store.ts";
-import type { Account, Transaction } from "../src/lib/types.ts";
+import { parseLegacyCsv, recomputeGoalAmounts } from "../src/lib/store.ts";
+import type { Account, AppDatabase, Transaction } from "../src/lib/types.ts";
 
 const sampleAccounts: Account[] = [
   { id: "acc-cash", name: "Tunai", kind: "cash", initialBalance: 0 },
@@ -170,7 +171,32 @@ function runTests() {
   assert.equal(imported[0].date, "2026-11-16");
   assert.equal(imported[0].amount, 25_000);
 
-  console.log("ALL CORE TESTS PASSED (6/6)");
+  // 7. Daily-average divisor uses real elapsed days per period
+  assert.equal(countElapsedDays(txs, "month", now), 17);
+  assert.equal(countElapsedDays(txs, "year", now), 321); // Jan 1 .. Nov 17, 2026
+  assert.equal(countElapsedDays(txs, { kind: "month", monthKey: "2026-10" }, now), 31);
+  assert.equal(countElapsedDays(txs, { kind: "month", monthKey: "2026-12" }, now), 1);
+  assert.equal(
+    countElapsedDays(txs, { kind: "custom", startDate: "2026-11-10", endDate: "2026-11-30" }, now),
+    8,
+  );
+  assert.equal(computePeriodMetrics(txs, "year", now).dailyAverageExpense, Math.round(20_000 / 321));
+
+  // 8. Goal progress derived from deposit transactions (edit/delete stays consistent)
+  const goalDb = {
+    goals: [{ id: "g1", name: "Laptop", targetAmount: 1_000_000, currentAmount: 999, createdAt: "" }],
+    transactions: [
+      { ...txs[1], id: "d1", amount: 100_000, goalId: "g1" },
+      { ...txs[1], id: "d2", amount: 50_000, goalId: "g1" },
+    ],
+  } as unknown as AppDatabase;
+  recomputeGoalAmounts(goalDb);
+  assert.equal(goalDb.goals[0].currentAmount, 150_000);
+  goalDb.transactions = goalDb.transactions.filter((t) => t.id !== "d2");
+  recomputeGoalAmounts(goalDb);
+  assert.equal(goalDb.goals[0].currentAmount, 100_000);
+
+  console.log("ALL CORE TESTS PASSED (8/8)");
 }
 
 runTests();

@@ -144,7 +144,21 @@ export function readDb(): AppDatabase {
   return parsed;
 }
 
+/** Goal progress is derived from its deposit transactions so edits/deletes in Riwayat stay consistent. */
+export function recomputeGoalAmounts(db: AppDatabase): void {
+  const totals = new Map<string, number>();
+  for (const tx of db.transactions) {
+    if (tx.goalId && tx.type === "Keluar") {
+      totals.set(tx.goalId, (totals.get(tx.goalId) ?? 0) + tx.amount);
+    }
+  }
+  for (const goal of db.goals) {
+    goal.currentAmount = totals.get(goal.id) ?? 0;
+  }
+}
+
 export function writeDb(db: AppDatabase): void {
+  recomputeGoalAmounts(db);
   fs.mkdirSync(DATA_DIR, { recursive: true });
   const tempPath = `${DB_PATH}.tmp`;
   fs.writeFileSync(tempPath, JSON.stringify(db, null, 2), "utf8");
