@@ -12,8 +12,8 @@ export const metadata: Metadata = {
 export default function PrivacyPage() {
   return (
     <div className="min-h-dvh bg-[var(--bg-canvas)] text-[var(--text-primary)]">
-      <header className="border-b border-[var(--border-subtle)] bg-[var(--bg-card)] px-4 py-3.5 sm:px-8 lg:px-12">
-        <div className="flex w-full items-center justify-between gap-3">
+      <header className="border-b border-[var(--border-subtle)] bg-[var(--bg-card)] px-4 py-3.5 sm:px-8">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3">
           <Link href="/" className="flex min-h-[44px] items-center gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--brand-primary)] text-white">
               <OctopusMascot mood="saving" size={34} />
@@ -35,8 +35,8 @@ export default function PrivacyPage() {
         </div>
       </header>
 
-      <main className="w-full px-4 py-8 sm:px-8 lg:px-12 sm:py-10">
-        <article className="mx-auto max-w-5xl space-y-6 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-6 sm:p-8">
+      <main className="px-4 py-8 sm:px-8 sm:py-10">
+        <article className="mx-auto w-full max-w-6xl space-y-6 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-6 sm:p-8">
           <div className="border-b border-[var(--border-subtle)] pb-5">
             <h1 className="text-2xl font-extrabold tracking-tight text-[var(--text-primary)] sm:text-3xl">
               Kebijakan Privasi CatatCepat
@@ -176,8 +176,8 @@ export default function PrivacyPage() {
         </article>
       </main>
 
-      <footer className="border-t border-[var(--border-subtle)] px-4 py-6 text-center text-xs text-[var(--text-muted)] sm:px-8 lg:px-12">
-        <div className="flex w-full flex-wrap items-center justify-between gap-3">
+      <footer className="border-t border-[var(--border-subtle)] bg-[var(--bg-card)] px-4 py-6 text-center text-xs text-[var(--text-muted)] sm:px-8">
+        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3">
           <span>CatatCepat · {APP_SLOGAN}</span>
           <div className="flex items-center gap-4">
             <Link href="/privacy" className="font-bold text-[var(--text-primary)] underline">
