@@ -1041,50 +1041,61 @@ export function AppClient({ initialDb }: AppClientProps) {
           {/* ================================================= */}
           {activeTab === "beranda" && (
             <>
-              {/* Compact Top Strip: Balance + Daily Safe Allowance + Theme Dots + Hide Toggle */}
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3.5 py-2.5">
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 tabular-nums">
-                  <div>
-                    <span className="block text-[11px] font-semibold text-[var(--text-muted)]">
-                      Total Saldo
-                    </span>
-                    <strong className="text-sm font-extrabold text-[var(--text-primary)] sm:text-base">
-                      {displayMoney(totalAssets)}
-                    </strong>
-                  </div>
-                  <div className="h-6 w-px bg-[var(--border-subtle)] hidden sm:block" aria-hidden="true" />
-                  <div>
-                    <span className="flex items-center gap-1.5 text-[11px] font-semibold text-[var(--text-muted)]">
-                      Jatah Hari Ini
-                      <button
-                        type="button"
-                        onClick={() => setFormulaModalOpen(true)}
-                        className="font-bold text-[var(--brand-primary)] underline dark:text-[#fda4af]"
-                      >
-                        Rumus
-                      </button>
-                    </span>
-                    <strong className="text-sm font-extrabold text-[var(--brand-primary)] dark:text-[#fda4af] sm:text-base">
-                      {displayMoney(allowance.remainingToday)}
-                    </strong>
-                  </div>
-                </div>
+              {/* Attractive Theme-Reactive Hero Strip: Balance + Daily Safe Allowance + Theme Dots + Hide Toggle */}
+              <div className="hero-maroon-gradient rounded-2xl px-4 py-3.5 text-white shadow-sm sm:px-5 sm:py-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-x-5 gap-y-2 tabular-nums">
+                    <div>
+                      <span className="block text-[11px] font-semibold text-white/85">
+                        Total Saldo · Semua Waktu
+                      </span>
+                      <strong className="mt-0.5 block text-lg font-extrabold tracking-tight text-white sm:text-xl">
+                        {displayMoney(totalAssets)}
+                      </strong>
+                    </div>
 
-                <div className="flex flex-wrap items-center gap-2">
-                  <ThemeDots
-                    compact
-                    showLabel={false}
-                    value={themeColor}
-                    onChange={handleChangeTheme}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setHideNumbers((v) => !v)}
-                    aria-label={hideNumbers ? "Tampilkan nominal" : "Sembunyikan nominal"}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                  >
-                    <EyeIcon off={hideNumbers} className="h-4 w-4" />
-                  </button>
+                    <div className="hidden h-9 w-px bg-white/25 sm:block" aria-hidden="true" />
+
+                    <div>
+                      <span className="flex items-center gap-1.5 text-[11px] font-semibold text-white/85">
+                        Jatah Hari Ini
+                        <button
+                          type="button"
+                          onClick={() => setFormulaModalOpen(true)}
+                          className="rounded-md bg-white/15 px-1.5 py-0.5 text-[10px] font-bold text-white transition-colors hover:bg-white/25"
+                        >
+                          Rumus
+                        </button>
+                      </span>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                        <strong className="text-lg font-extrabold tracking-tight text-white sm:text-xl">
+                          {displayMoney(allowance.remainingToday)}
+                        </strong>
+                        {allowance.remainingToday < 0 && !hideNumbers && (
+                          <span className="rounded-full bg-[#FEF3C7] px-2 py-0.5 text-[10px] font-extrabold text-[#92400E]">
+                            Lewat batas
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <ThemeDots
+                      compact
+                      showLabel={false}
+                      value={themeColor}
+                      onChange={handleChangeTheme}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setHideNumbers((v) => !v)}
+                      aria-label={hideNumbers ? "Tampilkan nominal" : "Sembunyikan nominal"}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/25 bg-white/15 text-white transition-colors hover:bg-white/25"
+                    >
+                      <EyeIcon off={hideNumbers} className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
 
