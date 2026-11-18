@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 
 export default function TermsPage() {
   return (
-    <div className="min-h-dvh bg-[var(--bg-canvas)] text-[var(--text-primary)]">
+    <div className="min-h-app bg-[var(--bg-canvas)] text-[var(--text-primary)]">
       <header className="border-b border-[var(--border-subtle)] bg-[var(--bg-card)] px-4 py-3.5 sm:px-8">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3">
           <Link href="/" className="flex min-h-[44px] items-center gap-3">

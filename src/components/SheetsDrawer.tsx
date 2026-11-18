@@ -21,12 +21,16 @@ export function SheetsDrawer({
   onTriggerSync,
   onNotify,
 }: SheetsDrawerProps) {
-  const [budgetText, setBudgetText] = useState(String(db.settings.monthlyBudget));
+  const [budgetText, setBudgetText] = useState(
+    String(db.settings.monthlyBudget),
+  );
   const [paydayDay, setPaydayDay] = useState(String(db.settings.paydayDay));
   const [preset, setPreset] = useState<WorkspaceSettings["categoryPreset"]>(
     db.settings.categoryPreset,
   );
-  const [initialBalances, setInitialBalances] = useState<Record<string, string>>({});
+  const [initialBalances, setInitialBalances] = useState<
+    Record<string, string>
+  >({});
   const [csvText, setCsvText] = useState("");
   const [previewRows, setPreviewRows] = useState<string[][] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -44,7 +48,9 @@ export function SheetsDrawer({
     setPaydayDay(String(db.settings.paydayDay));
     setPreset(db.settings.categoryPreset);
     setInitialBalances(
-      Object.fromEntries(db.accounts.map((acc) => [acc.id, String(acc.initialBalance || 0)])),
+      Object.fromEntries(
+        db.accounts.map((acc) => [acc.id, String(acc.initialBalance || 0)]),
+      ),
     );
     setErrorMsg(null);
     setConfirmClear(false);
@@ -71,7 +77,8 @@ export function SheetsDrawer({
       const numericInitialBalances = Object.fromEntries(
         db.accounts.map((acc) => [
           acc.id,
-          parseInt((initialBalances[acc.id] ?? "0").replace(/\D/g, ""), 10) || 0,
+          parseInt((initialBalances[acc.id] ?? "0").replace(/\D/g, ""), 10) ||
+            0,
         ]),
       );
       const res = await fetch("/api/state", {
@@ -84,7 +91,9 @@ export function SheetsDrawer({
           initialBalances: numericInitialBalances,
         }),
       });
-      const data = (await res.json().catch(() => ({}))) as AppDatabase & { error?: string };
+      const data = (await res.json().catch(() => ({}))) as AppDatabase & {
+        error?: string;
+      };
       if (!res.ok) throw new Error(data.error || "Gagal menyimpan pengaturan.");
       onStateUpdated(data);
       onNotify("Pengaturan anggaran, saldo awal, dan preset diperbarui.");
@@ -161,13 +170,20 @@ export function SheetsDrawer({
     setErrorMsg(null);
     try {
       const res = await fetch("/api/sheets/sync", { method: "DELETE" });
-      const data = (await res.json().catch(() => ({}))) as AppDatabase & { error?: string };
-      if (!res.ok) throw new Error(data.error || "Gagal memutus koneksi Google Sheets.");
+      const data = (await res.json().catch(() => ({}))) as AppDatabase & {
+        error?: string;
+      };
+      if (!res.ok)
+        throw new Error(data.error || "Gagal memutus koneksi Google Sheets.");
       onStateUpdated(data);
       setPreviewRows(null);
       onNotify("Koneksi Google Sheets diputus.");
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Gagal memutus koneksi Google Sheets.");
+      setErrorMsg(
+        err instanceof Error
+          ? err.message
+          : "Gagal memutus koneksi Google Sheets.",
+      );
     } finally {
       setBusy(false);
     }
@@ -191,7 +207,8 @@ export function SheetsDrawer({
         state?: AppDatabase;
         error?: string;
       };
-      if (!res.ok || !data.state) throw new Error(data.error || "CSV gagal dibaca.");
+      if (!res.ok || !data.state)
+        throw new Error(data.error || "CSV gagal dibaca.");
       onStateUpdated(data.state);
       setCsvText("");
       onNotify(`Berhasil mengimpor ${data.importedCount} transaksi dari CSV.`);
@@ -214,7 +231,9 @@ export function SheetsDrawer({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "clear_all_data" }),
       });
-      const next = (await res.json().catch(() => ({}))) as AppDatabase & { error?: string };
+      const next = (await res.json().catch(() => ({}))) as AppDatabase & {
+        error?: string;
+      };
       if (!res.ok) throw new Error(next.error || "Gagal menghapus semua data.");
       onStateUpdated(next);
       setConfirmClear(false);
@@ -223,7 +242,9 @@ export function SheetsDrawer({
         void onTriggerSync?.(true);
       }
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Gagal menghapus semua data.");
+      setErrorMsg(
+        err instanceof Error ? err.message : "Gagal menghapus semua data.",
+      );
     } finally {
       setBusy(false);
     }
@@ -243,11 +264,17 @@ export function SheetsDrawer({
     setErrorMsg(null);
     try {
       const res = await fetch("/api/auth?provider=google");
-      const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
-      if (!res.ok || !data.url) throw new Error(data.error || "Gagal memulai login Google.");
+      const data = (await res.json().catch(() => ({}))) as {
+        url?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.url)
+        throw new Error(data.error || "Gagal memulai login Google.");
       window.location.href = data.url;
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Gagal memulai login Google.");
+      setErrorMsg(
+        err instanceof Error ? err.message : "Gagal memulai login Google.",
+      );
       setBusy(false);
     }
   };
@@ -274,9 +301,12 @@ export function SheetsDrawer({
         message?: string;
         error?: string;
       };
-      if (!res.ok) throw new Error(data.error || "Gagal memproses autentikasi.");
+      if (!res.ok)
+        throw new Error(data.error || "Gagal memproses autentikasi.");
       if (data.needsEmailConfirmation) {
-        setAuthInfoMsg(data.message || "Cek email Anda untuk verifikasi pendaftaran.");
+        setAuthInfoMsg(
+          data.message || "Cek email Anda untuk verifikasi pendaftaran.",
+        );
         return;
       }
       if (data.state) {
@@ -305,8 +335,12 @@ export function SheetsDrawer({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "logout" }),
       });
-      const data = (await res.json().catch(() => ({}))) as { state?: AppDatabase; error?: string };
-      if (!res.ok || !data.state) throw new Error(data.error || "Gagal keluar akun.");
+      const data = (await res.json().catch(() => ({}))) as {
+        state?: AppDatabase;
+        error?: string;
+      };
+      if (!res.ok || !data.state)
+        throw new Error(data.error || "Gagal keluar akun.");
       onStateUpdated(data.state);
       onNotify("Anda sudah keluar dari akun.");
     } catch (err) {
@@ -330,11 +364,16 @@ export function SheetsDrawer({
         state?: AppDatabase;
         error?: string;
       };
-      if (!res.ok || !data.state) throw new Error(data.error || "Gagal memindahkan catatan.");
+      if (!res.ok || !data.state)
+        throw new Error(data.error || "Gagal memindahkan catatan.");
       onStateUpdated(data.state);
-      onNotify(`Berhasil menyimpan ${data.migratedCount ?? 0} catatan ke akun Anda.`);
+      onNotify(
+        `Berhasil menyimpan ${data.migratedCount ?? 0} catatan ke akun Anda.`,
+      );
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Gagal menyalin data lokal.");
+      setErrorMsg(
+        err instanceof Error ? err.message : "Gagal menyalin data lokal.",
+      );
     } finally {
       setBusy(false);
     }
@@ -342,7 +381,7 @@ export function SheetsDrawer({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-[rgba(0,0,0,0.55)] p-0 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="drawer-sheets-title"
@@ -350,10 +389,13 @@ export function SheetsDrawer({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="animate-sheet-up flex max-h-[92dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] shadow-2xl sm:rounded-2xl">
+      <div className="animate-sheet-up max-h-sheet flex w-full max-w-xl flex-col overflow-hidden rounded-t-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] shadow-2xl sm:rounded-2xl">
         <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-5 py-4">
           <div>
-            <h2 id="drawer-sheets-title" className="text-base font-extrabold text-[var(--text-primary)]">
+            <h2
+              id="drawer-sheets-title"
+              className="text-base font-extrabold text-[var(--text-primary)]"
+            >
               Pengaturan Akun &amp; Google Sheets
             </h2>
             <p className="text-xs text-[var(--text-muted)]">
@@ -370,7 +412,7 @@ export function SheetsDrawer({
           </button>
         </div>
 
-        <div className="space-y-5 overflow-y-auto px-5 py-4">
+        <div className="space-y-5 overflow-y-auto px-5 pb-8 pt-4 sm:py-4">
           {/* Akun & Penyimpanan Online */}
           <section className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -470,7 +512,10 @@ export function SheetsDrawer({
                     onChange={(e) => setMigrateLocalOnAuth(e.target.checked)}
                     className="rounded"
                   />
-                  <span>Pindahkan catatan di perangkat ini ke akun saya setelah masuk</span>
+                  <span>
+                    Pindahkan catatan di perangkat ini ke akun saya setelah
+                    masuk
+                  </span>
                 </label>
 
                 {authInfoMsg && (
@@ -484,7 +529,9 @@ export function SheetsDrawer({
                   disabled={busy}
                   className="min-h-[40px] rounded-xl bg-[var(--brand-primary)] px-4 text-xs font-bold text-white hover:bg-[var(--brand-hover)] disabled:opacity-60"
                 >
-                  {authMode === "register" ? "Daftar & Buat Akun" : "Masuk ke Akun"}
+                  {authMode === "register"
+                    ? "Daftar & Buat Akun"
+                    : "Masuk ke Akun"}
                 </button>
               </form>
             )}
@@ -554,7 +601,8 @@ export function SheetsDrawer({
               <div className="mt-2.5 space-y-1.5 text-[11px]">
                 {totalPendingCount > 0 ? (
                   <p className="rounded-lg bg-[var(--bg-soft)] px-2.5 py-1.5 font-bold text-[var(--brand-primary)] dark:text-[#fda4af]">
-                    Menunggu sinkronisasi: {pendingTxCount} transaksi, {pendingDeleteCount} hapus
+                    Menunggu sinkronisasi: {pendingTxCount} transaksi,{" "}
+                    {pendingDeleteCount} hapus
                   </p>
                 ) : (
                   <p className="text-[var(--text-muted)]">
@@ -603,7 +651,9 @@ export function SheetsDrawer({
                 onClick={() => handleSyncOrPreview(false)}
                 className="min-h-[42px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-4 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)] disabled:opacity-60"
               >
-                {sheetConnection.connected ? "Sinkron Sekarang" : "Lihat Pratinjau Tabel"}
+                {sheetConnection.connected
+                  ? "Sinkron Sekarang"
+                  : "Lihat Pratinjau Tabel"}
               </button>
 
               {sheetConnection.connected && (
@@ -621,18 +671,28 @@ export function SheetsDrawer({
             {previewRows && (
               <div className="mt-3 overflow-x-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-2.5">
                 <p className="mb-1.5 text-[11px] font-bold text-[var(--text-muted)]">
-                  Pratinjau susunan tabel di Google Sheets (baris yang diubah atau dihapus akan ikut menyesuaikan otomatis):
+                  Pratinjau susunan tabel di Google Sheets (baris yang diubah
+                  atau dihapus akan ikut menyesuaikan otomatis):
                 </p>
                 <table className="w-full text-left text-[11px] tabular-nums">
                   <tbody>
                     {previewRows.map((row, idx) => (
                       <tr
                         key={idx}
-                        className={idx === 0 ? "border-b border-[var(--border-subtle)] font-bold" : ""}
+                        className={
+                          idx === 0
+                            ? "border-b border-[var(--border-subtle)] font-bold"
+                            : ""
+                        }
                       >
                         {row.slice(0, 6).map((cell, cIdx) => (
-                          <td key={cIdx} className="whitespace-nowrap px-2 py-1">
-                            {cIdx === 0 && idx > 0 ? `${cell.slice(0, 8)}...` : cell}
+                          <td
+                            key={cIdx}
+                            className="whitespace-nowrap px-2 py-1"
+                          >
+                            {cIdx === 0 && idx > 0
+                              ? `${cell.slice(0, 8)}...`
+                              : cell}
                           </td>
                         ))}
                       </tr>
@@ -664,8 +724,12 @@ export function SheetsDrawer({
                   id="setting-budget"
                   type="text"
                   inputMode="numeric"
-                  value={(parseInt(budgetText.replace(/\D/g, ""), 10) || 0).toLocaleString("id-ID")}
-                  onChange={(e) => setBudgetText(e.target.value.replace(/\D/g, ""))}
+                  value={(
+                    parseInt(budgetText.replace(/\D/g, ""), 10) || 0
+                  ).toLocaleString("id-ID")}
+                  onChange={(e) =>
+                    setBudgetText(e.target.value.replace(/\D/g, ""))
+                  }
                   className="min-h-[42px] w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 text-sm font-bold text-[var(--text-primary)] tabular-nums"
                 />
               </div>
@@ -699,14 +763,25 @@ export function SheetsDrawer({
                 id="setting-preset"
                 value={preset}
                 onChange={(e) =>
-                  setPreset(e.target.value as WorkspaceSettings["categoryPreset"])
+                  setPreset(
+                    e.target.value as WorkspaceSettings["categoryPreset"],
+                  )
                 }
                 className="min-h-[42px] w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 text-xs font-bold text-[var(--text-primary)]"
               >
-                <option value="umum">Umum / Keluarga (Gaji, Tunjangan, Bonus, Usaha Sampingan, Lain-lain)</option>
-                <option value="asn_karyawan">ASN / Karyawan (Gaji, Tunjangan, Bonus, THR, Lain-lain)</option>
-                <option value="mahasiswa">Mahasiswa (Uang Saku, Beasiswa, Lain-lain)</option>
-                <option value="freelancer">Freelance (Proyek Klien, Retainer, Royalti, Produk, Lain-lain)</option>
+                <option value="umum">
+                  Umum / Keluarga (Gaji, Tunjangan, Bonus, Usaha Sampingan,
+                  Lain-lain)
+                </option>
+                <option value="asn_karyawan">
+                  ASN / Karyawan (Gaji, Tunjangan, Bonus, THR, Lain-lain)
+                </option>
+                <option value="mahasiswa">
+                  Mahasiswa (Uang Saku, Beasiswa, Lain-lain)
+                </option>
+                <option value="freelancer">
+                  Freelance (Proyek Klien, Retainer, Royalti, Produk, Lain-lain)
+                </option>
               </select>
             </div>
 
@@ -716,7 +791,8 @@ export function SheetsDrawer({
               </span>
               <div className="grid gap-2 sm:grid-cols-3">
                 {db.accounts.map((acc) => {
-                  const raw = initialBalances[acc.id] ?? String(acc.initialBalance || 0);
+                  const raw =
+                    initialBalances[acc.id] ?? String(acc.initialBalance || 0);
                   const numeric = parseInt(raw.replace(/\D/g, ""), 10) || 0;
                   return (
                     <div key={acc.id}>
@@ -757,11 +833,8 @@ export function SheetsDrawer({
           {/* Legacy CSV Importer */}
           <section className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-4">
             <h3 className="text-sm font-extrabold text-[var(--text-primary)]">
-              Impor Data dari CatatCepat Lama
+              Impor Data
             </h3>
-            <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-              Tempel isi file hasil unduhan CatatCepat versi sebelumnya (Tanggal,Jenis,Nominal,Kategori,Keterangan).
-            </p>
             <label
               htmlFor="legacy-csv-input"
               className="mt-2 block text-xs font-bold text-[var(--text-muted)]"
@@ -773,7 +846,9 @@ export function SheetsDrawer({
               rows={3}
               value={csvText}
               onChange={(e) => setCsvText(e.target.value)}
-              placeholder={"Tanggal,Jenis,Nominal,Kategori,Keterangan\n16-11-2026,Keluar,25000,Makan & Minum,Nasi Padang"}
+              placeholder={
+                "Tanggal,Jenis,Nominal,Kategori,Keterangan\n16-11-2026,Keluar,25000,Makan & Minum,Nasi Padang"
+              }
               className="mt-1 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-2.5 text-xs text-[var(--text-primary)]"
             />
             <button
@@ -787,7 +862,10 @@ export function SheetsDrawer({
           </section>
 
           {errorMsg && (
-            <p role="alert" className="rounded-xl bg-[var(--expense-bg)] px-3 py-2 text-xs font-bold text-[var(--expense-text)]">
+            <p
+              role="alert"
+              className="rounded-xl bg-[var(--expense-bg)] px-3 py-2 text-xs font-bold text-[var(--expense-text)]"
+            >
               {errorMsg}
             </p>
           )}
@@ -804,7 +882,9 @@ export function SheetsDrawer({
               </button>
             ) : (
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-[var(--expense-text)]">Yakin hapus semua?</span>
+                <span className="text-xs font-bold text-[var(--expense-text)]">
+                  Yakin hapus semua?
+                </span>
                 <button
                   type="button"
                   onClick={handleClearAll}

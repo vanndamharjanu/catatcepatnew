@@ -123,7 +123,7 @@ export function AccountCarousel({
                     type="button"
                     onClick={onToggleHideNumbers}
                     aria-label={hideNumbers ? "Tampilkan semua nominal" : "Sembunyikan semua nominal"}
-                    className="flex h-7 w-7 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25"
+                    className="flex h-7 w-7 items-center justify-center rounded-full bg-[rgba(255,255,255,0.16)] text-white hover:bg-[rgba(255,255,255,0.26)]"
                   >
                     <EyeIcon off={hideNumbers} className="h-3.5 w-3.5" />
                   </button>
@@ -134,12 +134,12 @@ export function AccountCarousel({
                     type="button"
                     onClick={() => setPeekTotal((v) => !v)}
                     aria-label={peekTotal ? "Sembunyikan lagi nominal total" : "Intip nominal total saldo"}
-                    className="mt-1 text-left text-3xl font-extrabold tracking-tight tabular-nums underline decoration-dotted underline-offset-4 sm:text-4xl"
+                    className="mt-1 text-left text-2xl font-extrabold tracking-tight tabular-nums underline decoration-dotted underline-offset-4 sm:text-4xl"
                   >
                     {formatMasked(totalAssets, peekTotal)}
                   </button>
                 ) : (
-                  <p className="mt-1 text-3xl font-extrabold tracking-tight tabular-nums sm:text-4xl">
+                  <p className="mt-1 text-2xl font-extrabold tracking-tight tabular-nums sm:text-4xl">
                     {formatRupiah(totalAssets)}
                   </p>
                 )}
@@ -156,21 +156,21 @@ export function AccountCarousel({
 
             {/* Income vs Expense summary + proportion bar */}
             <div className="mt-4 grid grid-cols-2 gap-2.5">
-              <div className="rounded-2xl bg-white/10 p-3 backdrop-blur-xs">
+              <div className="rounded-2xl bg-[rgba(255,255,255,0.12)] p-3">
                 <span className="flex items-center gap-1 text-xs font-medium text-[#F6D8DF]">
                   <ArrowInIcon className="h-3.5 w-3.5" />
                   Pemasukan
                 </span>
-                <span className="mt-1 block text-base font-extrabold tabular-nums">
+                <span className="mt-1 block text-sm font-extrabold tabular-nums sm:text-base">
                   {formatMasked(periodIncome, peekTotal)}
                 </span>
               </div>
-              <div className="rounded-2xl bg-white/10 p-3 backdrop-blur-xs">
+              <div className="rounded-2xl bg-[rgba(255,255,255,0.12)] p-3">
                 <span className="flex items-center gap-1 text-xs font-medium text-[#F6D8DF]">
                   <ArrowOutIcon className="h-3.5 w-3.5" />
                   Pengeluaran
                 </span>
-                <span className="mt-1 block text-base font-extrabold tabular-nums">
+                <span className="mt-1 block text-sm font-extrabold tabular-nums sm:text-base">
                   {formatMasked(periodExpense, peekTotal)}
                 </span>
               </div>
@@ -182,7 +182,7 @@ export function AccountCarousel({
                   <span>Masuk {incomePct}%</span>
                   <span>Keluar {expensePct}%</span>
                 </div>
-                <div className="mt-1 flex h-1.5 w-full overflow-hidden rounded-full bg-black/25">
+                <div className="mt-1 flex h-1.5 w-full overflow-hidden rounded-full bg-[rgba(0,0,0,0.25)]">
                   <div className="bg-[#34D399]" style={{ width: `${incomePct}%` }} />
                   <div className="bg-[#FDA4AF]" style={{ width: `${expensePct}%` }} />
                 </div>
@@ -190,7 +190,7 @@ export function AccountCarousel({
             )}
 
             {/* Jatah Aman Harian Bar */}
-            <div className="mt-4 rounded-2xl bg-black/25 p-3.5">
+            <div className="mt-4 rounded-2xl bg-[rgba(0,0,0,0.25)] p-3.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <span className="block text-[11px] font-semibold text-[#F6D8DF]">
@@ -203,7 +203,7 @@ export function AccountCarousel({
                 <button
                   type="button"
                   onClick={onOpenFormula}
-                  className="min-h-[36px] rounded-xl bg-white/15 px-3 text-xs font-bold text-white hover:bg-white/25"
+                  className="min-h-[36px] rounded-xl bg-[rgba(255,255,255,0.16)] px-3 text-xs font-bold text-white hover:bg-[rgba(255,255,255,0.26)]"
                 >
                   Rumus
                 </button>
@@ -233,7 +233,7 @@ export function AccountCarousel({
                 <div>
                   <div className="flex items-center justify-between gap-2">
                     <span
-                      className="rounded-full bg-white/15 px-3 py-1 text-xs font-bold"
+                      className="rounded-full bg-[rgba(255,255,255,0.16)] px-3 py-1 text-xs font-bold"
                       style={{ color: theme.tint }}
                     >
                       {theme.label}
@@ -254,12 +254,12 @@ export function AccountCarousel({
                         setPeekAccountId((prev) => (prev === acc.id ? null : acc.id))
                       }
                       aria-label={isRevealed ? `Sembunyikan saldo ${acc.name}` : `Intip saldo ${acc.name}`}
-                      className="mt-1 text-left text-3xl font-extrabold tracking-tight tabular-nums underline decoration-dotted underline-offset-4 sm:text-4xl"
+                      className="mt-1 text-left text-2xl font-extrabold tracking-tight tabular-nums underline decoration-dotted underline-offset-4 sm:text-4xl"
                     >
                       {formatMasked(acc.balance, isRevealed)}
                     </button>
                   ) : (
-                    <p className="mt-1 text-3xl font-extrabold tracking-tight tabular-nums sm:text-4xl">
+                    <p className="mt-1 text-2xl font-extrabold tracking-tight tabular-nums sm:text-4xl">
                       {formatRupiah(acc.balance)}
                     </p>
                   )}
@@ -270,9 +270,9 @@ export function AccountCarousel({
                       <span>Kontribusi ke total saldo positif</span>
                       <span className="tabular-nums">{sharePct}%</span>
                     </div>
-                    <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-black/30">
+                    <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-[rgba(0,0,0,0.3)]">
                       <div
-                        className="h-full rounded-full bg-white/85 transition-all duration-300"
+                        className="h-full rounded-full bg-[rgba(255,255,255,0.85)] transition-all duration-300"
                         style={{ width: `${Math.max(sharePct, acc.balance > 0 ? 4 : 0)}%` }}
                       />
                     </div>
@@ -284,7 +284,7 @@ export function AccountCarousel({
                   <button
                     type="button"
                     onClick={() => onQuickCatatAccount(acc.id)}
-                    className="flex min-h-[42px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-white px-4 text-xs font-extrabold text-[#1F0B10] hover:bg-white/90"
+                    className="flex min-h-[42px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-white px-4 text-xs font-extrabold text-[#1F0B10] hover:bg-[#faf6f7]"
                   >
                     <PlusIcon className="h-4 w-4" />
                     Catat di {acc.name}
@@ -293,7 +293,7 @@ export function AccountCarousel({
                     <button
                       type="button"
                       onClick={() => onOpenReconcile(acc.id)}
-                      className="flex min-h-[42px] flex-1 items-center justify-center rounded-xl bg-white/15 px-4 text-xs font-extrabold text-white hover:bg-white/25"
+                      className="flex min-h-[42px] flex-1 items-center justify-center rounded-xl bg-[rgba(255,255,255,0.16)] px-4 text-xs font-extrabold text-white hover:bg-[rgba(255,255,255,0.26)]"
                     >
                       Koreksi Saldo
                     </button>
@@ -310,7 +310,7 @@ export function AccountCarousel({
             type="button"
             onClick={() => scrollToSlide(activeSlide - 1)}
             aria-label="Kartu rekening sebelumnya"
-            className="hidden md:flex absolute left-3 top-1/2 -translate-y-1/2 h-9 w-9 items-center justify-center rounded-full bg-black/35 text-white hover:bg-black/55"
+            className="hidden md:flex absolute left-3 top-1/2 -translate-y-1/2 h-9 w-9 items-center justify-center rounded-full bg-[rgba(0,0,0,0.35)] text-white hover:bg-[rgba(0,0,0,0.55)]"
           >
             <ChevronLeftIcon className="h-5 w-5" />
           </button>
@@ -320,7 +320,7 @@ export function AccountCarousel({
             type="button"
             onClick={() => scrollToSlide(activeSlide + 1)}
             aria-label="Kartu rekening berikutnya"
-            className="hidden md:flex absolute right-3 top-1/2 -translate-y-1/2 h-9 w-9 items-center justify-center rounded-full bg-black/35 text-white hover:bg-black/55"
+            className="hidden md:flex absolute right-3 top-1/2 -translate-y-1/2 h-9 w-9 items-center justify-center rounded-full bg-[rgba(0,0,0,0.35)] text-white hover:bg-[rgba(0,0,0,0.55)]"
           >
             <ChevronRightIcon className="h-5 w-5" />
           </button>
@@ -446,7 +446,7 @@ export function KoreksiSaldoModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-[rgba(0,0,0,0.55)] p-0 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="reconcile-title"
@@ -456,7 +456,7 @@ export function KoreksiSaldoModal({
     >
       <form
         onSubmit={handleSubmit}
-        className="animate-sheet-up w-full max-w-md space-y-4 rounded-t-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5 shadow-2xl sm:rounded-2xl"
+        className="animate-sheet-up max-h-sheet w-full max-w-md space-y-4 overflow-y-auto rounded-t-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5 shadow-2xl sm:rounded-2xl"
       >
         <div className="flex items-center justify-between gap-2">
           <div>

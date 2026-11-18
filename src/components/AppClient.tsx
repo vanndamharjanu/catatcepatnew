@@ -783,7 +783,7 @@ export function AppClient({ initialDb }: AppClientProps) {
   }
 
   return (
-    <div className="min-h-dvh bg-[var(--bg-canvas)] text-[var(--text-primary)] md:flex">
+    <div className="min-h-app bg-[var(--bg-canvas)] text-[var(--text-primary)] md:flex">
       {/* Desktop Left Navigation Rail (Reflows from mobile bottom dock per antislop-layoutmobile) */}
       <aside className="no-print hidden md:flex md:w-64 md:shrink-0 md:flex-col md:border-r md:border-[var(--border-subtle)] md:bg-[var(--bg-card)] md:p-4">
         <div className="flex items-center gap-2.5 px-2 py-2">
@@ -859,14 +859,14 @@ export function AppClient({ initialDb }: AppClientProps) {
       {/* Main Content Area */}
       <div className="flex-1 pb-24 md:pb-8">
         {/* Top Mobile/Tablet Bar */}
-        <header className="no-print sticky top-0 z-30 border-b border-[var(--border-subtle)] bg-[var(--bg-canvas)]/95 px-4 py-3 backdrop-blur-sm md:px-8">
-          <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5 min-w-0">
+        <header className="no-print sticky top-0 z-30 border-b border-[var(--border-subtle)] bg-[var(--nav-bg)] px-4 py-3 backdrop-blur-sm md:px-8">
+          <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-x-2.5 gap-y-2 sm:flex-nowrap">
+            <div className="flex min-w-[165px] items-center gap-2.5">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--brand-primary)] md:hidden">
                 <OctopusMascot mood="saving" size={30} />
               </div>
               <div className="min-w-0">
-                <h1 className="truncate text-lg font-extrabold tracking-tight text-[var(--text-primary)]">
+                <h1 className="text-base font-extrabold tracking-tight text-[var(--text-primary)] sm:text-lg">
                   {activeTab === "beranda"
                     ? "CatatCepat"
                     : activeTab === "riwayat"
@@ -875,7 +875,7 @@ export function AppClient({ initialDb }: AppClientProps) {
                         ? "Target Tabungan"
                         : "Statistik Keuangan"}
                 </h1>
-                <p className="truncate text-xs text-[var(--text-muted)]">
+                <p className="text-[11px] leading-tight text-[var(--text-muted)] sm:text-xs">
                   {activeTab === "beranda" ? APP_SLOGAN : db.settings.name}
                 </p>
               </div>
@@ -1493,14 +1493,14 @@ export function AppClient({ initialDb }: AppClientProps) {
                   {displayMoney(totalGoalsSaved)}
                 </p>
                 <div className="mt-4 grid grid-cols-2 gap-2.5">
-                  <div className="rounded-xl bg-white/10 p-3">
+                  <div className="rounded-xl bg-[rgba(255,255,255,0.12)] p-3">
                     <span className="text-xs text-[#F6D8DF]">Target aktif</span>
                     <span className="mt-0.5 block text-base font-extrabold tabular-nums">
                       {db.goals.filter((g) => g.currentAmount < g.targetAmount).length} dari{" "}
                       {db.goals.length}
                     </span>
                   </div>
-                  <div className="rounded-xl bg-white/10 p-3">
+                  <div className="rounded-xl bg-[rgba(255,255,255,0.12)] p-3">
                     <span className="text-xs text-[#F6D8DF]">Setoran bulan ini</span>
                     <span className="mt-0.5 block text-base font-extrabold tabular-nums">
                       {displayMoney(monthlyGoalDeposits)}
@@ -1840,7 +1840,7 @@ export function AppClient({ initialDb }: AppClientProps) {
                 key={key}
                 type="button"
                 onClick={() => setActiveTab(key)}
-                className={`flex min-h-[48px] flex-col items-center justify-center gap-0.5 text-[11px] font-bold ${
+                className={`flex min-h-[48px] flex-col items-center justify-center gap-0.5 text-[10px] font-bold sm:text-[11px] ${
                   active
                     ? "text-[var(--brand-primary)] dark:text-[#fda4af]"
                     : "text-[var(--text-muted)]"
@@ -1870,7 +1870,7 @@ export function AppClient({ initialDb }: AppClientProps) {
                 key={key}
                 type="button"
                 onClick={() => setActiveTab(key)}
-                className={`flex min-h-[48px] flex-col items-center justify-center gap-0.5 text-[11px] font-bold ${
+                className={`flex min-h-[48px] flex-col items-center justify-center gap-0.5 text-[10px] font-bold sm:text-[11px] ${
                   active
                     ? "text-[var(--brand-primary)] dark:text-[#fda4af]"
                     : "text-[var(--text-muted)]"
@@ -1936,7 +1936,7 @@ export function AppClient({ initialDb }: AppClientProps) {
         };
         return (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[rgba(0,0,0,0.55)] p-4"
             role="dialog"
             aria-modal="true"
             aria-labelledby="formula-title"
@@ -2037,7 +2037,7 @@ export function AppClient({ initialDb }: AppClientProps) {
       {/* Target Baru Modal */}
       {goalModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[rgba(0,0,0,0.55)] p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="goal-modal-title"
@@ -2118,7 +2118,7 @@ export function AppClient({ initialDb }: AppClientProps) {
       {/* Setor Tabungan Modal */}
       {depositModalGoalId && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[rgba(0,0,0,0.55)] p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="deposit-modal-title"

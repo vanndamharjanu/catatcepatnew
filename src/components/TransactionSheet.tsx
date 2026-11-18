@@ -632,7 +632,7 @@ export function TransactionSheet({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-[rgba(0,0,0,0.55)] p-0 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="sheet-title"
@@ -640,7 +640,7 @@ export function TransactionSheet({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="animate-sheet-up flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] shadow-2xl sm:rounded-2xl">
+      <div className="animate-sheet-up max-h-sheet flex w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] shadow-2xl sm:rounded-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-5 py-4">
           <div className="flex items-center gap-3">
@@ -685,7 +685,7 @@ export function TransactionSheet({
         </div>
 
         {/* Scrollable Body */}
-        <div className="overflow-y-auto px-5 py-4">
+        <div className="overflow-y-auto px-5 pb-8 pt-4 sm:py-4">
           {mode === "manual" ? (
             <form onSubmit={handleSubmitManual} className="space-y-4">
               {/* Type toggle */}
