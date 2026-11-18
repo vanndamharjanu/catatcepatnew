@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     ];
     return NextResponse.json({
       mode: "preview",
-      message: "Google Sheets belum dihubungkan; menampilkan pratinjau struktur baris UUID siap sync.",
+      message: "Google Sheets belum dihubungkan; menampilkan pratinjau struktur tabel siap sinkron.",
       previewRows,
     });
   }

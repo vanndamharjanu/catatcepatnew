@@ -25,8 +25,7 @@ export async function GET(request: Request) {
   if (!cfg) {
     return NextResponse.json(
       {
-        error:
-          "Supabase belum dikonfigurasi. Isi NEXT_PUBLIC_SUPABASE_URL dan NEXT_PUBLIC_SUPABASE_ANON_KEY di .env.local.",
+        error: "Layanan akun online sedang tidak tersedia di server ini.",
       },
       { status: 400 },
     );
@@ -60,8 +59,7 @@ export async function POST(request: Request) {
     if (!isSupabaseConfigured()) {
       return NextResponse.json(
         {
-          error:
-            "Supabase belum dikonfigurasi. Isi NEXT_PUBLIC_SUPABASE_URL dan NEXT_PUBLIC_SUPABASE_ANON_KEY di .env.local.",
+          error: "Layanan akun online sedang tidak tersedia di server ini.",
         },
         { status: 400 },
       );
@@ -71,11 +69,14 @@ export async function POST(request: Request) {
       const accessToken = (body.accessToken || "").trim();
       const refreshToken = (body.refreshToken || "").trim();
       if (!accessToken) {
-        return NextResponse.json({ error: "Token sesi OAuth tidak ditemukan." }, { status: 400 });
+        return NextResponse.json({ error: "Sesi login Google tidak ditemukan." }, { status: 400 });
       }
       const user = await getSupabaseUser(accessToken);
       if (!user) {
-        return NextResponse.json({ error: "Token sesi Google OAuth tidak valid atau kedaluwarsa." }, { status: 401 });
+        return NextResponse.json(
+          { error: "Sesi login Google tidak valid atau kedaluwarsa. Silakan coba masuk lagi." },
+          { status: 401 },
+        );
       }
       cookieStore.set(CC_ACCESS_COOKIE, accessToken, {
         httpOnly: true,
@@ -100,7 +101,7 @@ export async function POST(request: Request) {
     if (body.action === "migrate_local") {
       const cloudDb = await readAsyncDb();
       if (!cloudDb.auth?.authenticated) {
-        return NextResponse.json({ error: "Silakan masuk ke akun Cloud terlebih dahulu." }, { status: 401 });
+        return NextResponse.json({ error: "Silakan masuk ke akun Anda terlebih dahulu." }, { status: 401 });
       }
       const localDb = readDb();
       const existingTxIds = new Set(cloudDb.transactions.map((t) => t.id));
@@ -135,7 +136,7 @@ export async function POST(request: Request) {
         return NextResponse.json({
           needsEmailConfirmation: true,
           message:
-            "Pendaftaran berhasil! Cek kotak masuk email Anda untuk verifikasi, atau matikan 'Confirm email' di Supabase Dashboard > Authentication > Providers > Email agar bisa langsung login.",
+            "Pendaftaran berhasil! Silakan buka kotak masuk email Anda dan klik tautan verifikasi untuk masuk.",
         });
       }
 
@@ -199,7 +200,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ state: toPublicState(db) });
   } catch (err) {
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Gagal memproses autentikasi Supabase." },
+      { error: err instanceof Error ? err.message : "Gagal memproses akun. Silakan coba beberapa saat lagi." },
       { status: 500 },
     );
   }

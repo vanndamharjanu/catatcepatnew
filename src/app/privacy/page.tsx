@@ -66,26 +66,23 @@ export default function PrivacyPage() {
               </li>
               <li>
                 <strong className="text-[var(--text-primary)]">Data Koneksi Google Sheets:</strong>{" "}
-                Email akun Google yang Anda hubungkan, ID serta URL file spreadsheet yang dibuat oleh
-                CatatCepat, dan token penyegaran (refresh token) terenkripsi.
+                Email akun Google yang Anda hubungkan, ID serta tautan file spreadsheet yang dibuat oleh
+                CatatCepat, dan kunci akses terenkripsi agar sinkronisasi otomatis tetap berjalan.
               </li>
             </ul>
           </section>
 
           <section className="space-y-2 text-sm leading-relaxed text-[var(--text-muted)]">
             <h2 className="text-base font-extrabold text-[var(--text-primary)]">
-              2. Penggunaan Google API Services &amp; Izin Drive Terbatas (drive.file)
+              2. Penggunaan Layanan Google &amp; Akses Drive Terbatas
             </h2>
             <p>
-              Untuk fitur sinkronisasi Google Sheets, CatatCepat menggunakan scope non-sensitif{" "}
+              Untuk menyinkronkan catatan ke Google Sheets, CatatCepat hanya meminta izin akses
+              terbatas (scope non-sensitif{" "}
               <code className="break-all rounded bg-[var(--bg-soft)] px-1.5 py-0.5 text-xs font-bold text-[var(--text-primary)]">
                 https://www.googleapis.com/auth/drive.file
               </code>{" "}
-              dan{" "}
-              <code className="rounded bg-[var(--bg-soft)] px-1.5 py-0.5 text-xs font-bold text-[var(--text-primary)]">
-                userinfo.email
-              </code>
-              . Dengan izin ini:
+              dan email akun Anda). Dengan izin ini:
             </p>
             <ul className="list-disc space-y-1.5 pl-5">
               <li>
@@ -97,15 +94,16 @@ export default function PrivacyPage() {
                 melihat, membaca, mengunduh, atau menghapus file Google Drive pribadi Anda yang lain.
               </li>
               <li>
-                Penggunaan dan transfer informasi yang diterima CatatCepat dari Google API mematuhi{" "}
+                Penggunaan dan pengiriman informasi yang diterima CatatCepat dari layanan Google
+                mematuhi{" "}
                 <strong className="text-[var(--text-primary)]">
                   Google API Services User Data Policy
                 </strong>
                 , termasuk persyaratan <em>Limited Use</em>.
               </li>
               <li>
-                Kami tidak menjual data Google Workspace Anda, tidak menggunakannya untuk iklan, dan
-                tidak menggunakannya untuk melatih model AI publik/umum.
+                Kami tidak menjual data Google Anda, tidak menggunakannya untuk iklan, dan tidak
+                menggunakannya untuk melatih model AI umum.
               </li>
             </ul>
           </section>
@@ -116,15 +114,15 @@ export default function PrivacyPage() {
             </h2>
             <ul className="list-disc space-y-1.5 pl-5">
               <li>
-                <strong className="text-[var(--text-primary)]">Rekam Suara:</strong> Ditransfer
-                menjadi teks secara lokal di browser Anda (Web Speech API) sebelum diproses menjadi draf
-                transaksi.
+                <strong className="text-[var(--text-primary)]">Rekam Suara:</strong> Diubah menjadi
+                teks langsung di browser Anda melalui fitur pengenalan suara perangkat sebelum diproses
+                menjadi draf transaksi.
               </li>
               <li>
                 <strong className="text-[var(--text-primary)]">Scan Struk &amp; Tanya Guri:</strong>{" "}
-                Saat Anda menekan tombol proses AI, teks atau foto struk dikirim sementara ke API model
-                AI (Google Gemini API) semata-mata untuk mengekstrak nominal, kategori, dan jawaban
-                ringkasan keuangan Anda. Foto struk tidak disimpan permanen di server kami.
+                Saat Anda menekan tombol proses AI, teks atau foto struk dikirim sementara ke layanan
+                AI Google Gemini semata-mata untuk membaca nominal, kategori, dan ringkasan keuangan
+                Anda. Foto struk tidak disimpan permanen di server kami.
               </li>
             </ul>
           </section>
@@ -134,10 +132,10 @@ export default function PrivacyPage() {
               4. Penyimpanan &amp; Keamanan Data
             </h2>
             <p>
-              Data pengguna di cloud disimpan pada PostgreSQL Supabase dengan isolasi{" "}
-              <strong className="text-[var(--text-primary)]">Row-Level Security (RLS)</strong>{" "}
-              sehingga setiap pengguna hanya dapat mengakses data miliknya sendiri. Token OAuth Google
-              Sheets disimpan dalam bentuk terenkripsi menggunakan algoritma AES-256-GCM.
+              Data catatan Anda disimpan di penyimpanan online dengan pemisahan akun yang ketat
+              sehingga setiap pengguna hanya dapat membuka dan mengubah data miliknya sendiri. Kunci
+              koneksi Google Sheets Anda juga disimpan dalam bentuk terenkripsi untuk menjaga keamanan
+              akses.
             </p>
           </section>
 
@@ -157,8 +155,8 @@ export default function PrivacyPage() {
                 .
               </li>
               <li>
-                Anda dapat mengekspor data ke CSV atau membersihkan transaksi workspace langsung dari
-                aplikasi kapan saja.
+                Anda dapat mengunduh data transaksi ke file Excel/CSV atau menghapus catatan langsung
+                dari aplikasi kapan saja.
               </li>
               <li>
                 Untuk permintaan penghapusan akun permanen, silakan kirim email dari alamat terdaftar

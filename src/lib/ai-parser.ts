@@ -15,16 +15,24 @@ import {
 
 const CATEGORY_KEYWORDS: Array<{ category: string; type: "Masuk" | "Keluar"; words: string[] }> = [
   { category: "Gaji", type: "Masuk", words: ["gaji", "salary", "payroll"] },
-  { category: "TPP", type: "Masuk", words: ["tpp", "tunjangan"] },
-  { category: "TPG", type: "Masuk", words: ["tpg", "sertifikasi"] },
-  { category: "Bonus", type: "Masuk", words: ["bonus", "thr", "insentif", "komisi", "freelance", "bayaran"] },
-  { category: "Makanan", type: "Keluar", words: ["makan", "ngopi", "kopi", "sarapan", "lunch", "dinner", "bakso", "nasi", "minum", "jajan", "snack", "warteg", "boba", "mie", "telur"] },
-  { category: "Transportasi", type: "Keluar", words: ["parkir", "bensin", "pertalite", "pertamax", "gojek", "grab", "ojek", "tol", "kereta", "krl", "mrt", "bus", "transjakarta", "grabcar"] },
-  { category: "Kebutuhan Sehari-hari", type: "Keluar", words: ["sabun", "beras", "indomaret", "alfamart", "belanja", "supermarket", "galon", "gas", "listrik", "token"] },
-  { category: "Komunikasi", type: "Keluar", words: ["pulsa", "kuota", "paket data", "wifi", "internet", "telkom"] },
-  { category: "Pembayaran", type: "Keluar", words: ["tagihan", "bayar", "cicilan", "air", "pdam", "bpjs", "sewa", "kost", "kontrakan"] },
-  { category: "Tabungan", type: "Keluar", words: ["tabung", "nabung", "invest", "emas", "reksadana"] },
-  { category: "Kado", type: "Keluar", words: ["kado", "hadiah", "sumbangan", "kondangan", "sedekah", "donasi"] },
+  { category: "Tunjangan", type: "Masuk", words: ["tunjangan", "tpp", "tpg", "sertifikasi"] },
+  { category: "THR", type: "Masuk", words: ["thr"] },
+  { category: "Usaha Sampingan", type: "Masuk", words: ["usaha sampingan", "jualan", "dagang", "orderan"] },
+  { category: "Uang Saku", type: "Masuk", words: ["uang saku", "kiriman ortu", "kiriman orang tua"] },
+  { category: "Beasiswa", type: "Masuk", words: ["beasiswa", "stipend"] },
+  { category: "Proyek Klien", type: "Masuk", words: ["proyek", "project", "klien", "client", "freelance", "bayaran"] },
+  { category: "Retainer", type: "Masuk", words: ["retainer"] },
+  { category: "Royalti", type: "Masuk", words: ["royalti", "royalty"] },
+  { category: "Produk", type: "Masuk", words: ["penjualan produk", "ebook", "template"] },
+  { category: "Bonus", type: "Masuk", words: ["bonus", "insentif", "komisi"] },
+  { category: "Makan & Minum", type: "Keluar", words: ["makan", "ngopi", "kopi", "sarapan", "lunch", "dinner", "bakso", "nasi", "minum", "jajan", "snack", "warteg", "boba", "mie", "telur"] },
+  { category: "Transportasi & Bensin", type: "Keluar", words: ["parkir", "bensin", "pertalite", "pertamax", "gojek", "grab", "ojek", "tol", "kereta", "krl", "mrt", "bus", "transjakarta", "grabcar"] },
+  { category: "Listrik & Air", type: "Keluar", words: ["listrik", "pln", "token listrik", "pdam", "tagihan air"] },
+  { category: "Pulsa & Kuota", type: "Keluar", words: ["pulsa", "kuota", "paket data", "wifi", "internet", "telkom"] },
+  { category: "Kesehatan & Obat", type: "Keluar", words: ["obat", "apotek", "dokter", "klinik", "rumah sakit", "bpjs", "kesehatan", "vitamin"] },
+  { category: "Sedekah & Donasi", type: "Keluar", words: ["sedekah", "donasi", "infaq", "zakat", "sumbangan", "santunan", "amal"] },
+  { category: "Pendidikan", type: "Keluar", words: ["kuliah", "ukt", "spp", "sekolah", "kursus", "buku", "les", "seminar", "pelatihan"] },
+  { category: "Belanja", type: "Keluar", words: ["sabun", "beras", "indomaret", "alfamart", "belanja", "supermarket", "galon", "gas", "baju", "sepatu", "tokopedia", "shopee", "tagihan", "cicilan", "sewa", "kost", "kontrakan", "kado", "hadiah"] },
 ];
 
 function parseAmountToken(segment: string): number {
@@ -322,7 +330,7 @@ export function formatAiErrorMessage(
   if (errorKind === "rate_limit") {
     return opts.isReceipt
       ? "Kuota/rate limit AI sedang penuh di semua model cadangan. Tunggu sebentar lalu coba lagi, atau ketik transaksi secara manual."
-      : "Kuota AI sedang penuh dan format kalimat belum terbaca parser lokal. Tunggu sebentar atau tulis dengan angka jelas (misal: 'Ngopi 25rb cash').";
+      : "Kuota/rate limit AI sedang penuh dan format kalimat belum terbaca otomatis. Tunggu sebentar atau tulis dengan angka jelas (misal: 'Ngopi 25rb cash').";
   }
   if (errorKind === "unavailable") {
     return "Server AI sedang sibuk/gangguan (termasuk model cadangan). Coba ulangi beberapa saat lagi.";

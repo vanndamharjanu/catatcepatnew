@@ -25,6 +25,13 @@ export function toIsoDate(date: Date = new Date()): string {
   return `${y}-${m}-${d}`;
 }
 
+/** Format stored YYYY-MM-DD date string as DD-MM-YYYY for display. */
+export function formatDisplayDate(isoDate: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec((isoDate || "").trim());
+  if (!match) return isoDate;
+  return `${match[3]}-${match[2]}-${match[1]}`;
+}
+
 export interface DailyAllowanceResult {
   dailyAllowance: number;
   spentToday: number;

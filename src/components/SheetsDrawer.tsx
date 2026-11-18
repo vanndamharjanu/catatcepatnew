@@ -106,12 +106,12 @@ export function SheetsDrawer({
         error?: string;
       };
       if (!res.ok || !data.url) {
-        setErrorMsg(data.error || "Google OAuth belum dikonfigurasi.");
+        setErrorMsg(data.error || "Koneksi Google Sheets belum tersedia.");
         return;
       }
       window.location.href = data.url;
     } catch {
-      setErrorMsg("Gagal memulai koneksi OAuth Google.");
+      setErrorMsg("Gagal menghubungkan ke Google Sheets.");
     } finally {
       setBusy(false);
     }
@@ -284,12 +284,12 @@ export function SheetsDrawer({
         setAuthPassword("");
         onNotify(
           authMode === "register"
-            ? "Akun Cloud berhasil dibuat dan dihubungkan ke Supabase."
+            ? "Akun berhasil dibuat dan terhubung."
             : `Berhasil masuk sebagai ${data.state.auth?.email || authEmail}.`,
         );
       }
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Gagal masuk ke Supabase.");
+      setErrorMsg(err instanceof Error ? err.message : "Gagal masuk ke akun.");
     } finally {
       setBusy(false);
     }
@@ -308,7 +308,7 @@ export function SheetsDrawer({
       const data = (await res.json().catch(() => ({}))) as { state?: AppDatabase; error?: string };
       if (!res.ok || !data.state) throw new Error(data.error || "Gagal keluar akun.");
       onStateUpdated(data.state);
-      onNotify("Keluar dari akun Cloud (kembali ke mode lokal).");
+      onNotify("Anda sudah keluar dari akun.");
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Gagal keluar akun.");
     } finally {
@@ -330,9 +330,9 @@ export function SheetsDrawer({
         state?: AppDatabase;
         error?: string;
       };
-      if (!res.ok || !data.state) throw new Error(data.error || "Gagal menyalin data lokal.");
+      if (!res.ok || !data.state) throw new Error(data.error || "Gagal memindahkan catatan.");
       onStateUpdated(data.state);
-      onNotify(`Berhasil menyalin ${data.migratedCount ?? 0} transaksi lokal ke Supabase Cloud.`);
+      onNotify(`Berhasil menyimpan ${data.migratedCount ?? 0} catatan ke akun Anda.`);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Gagal menyalin data lokal.");
     } finally {
@@ -371,19 +371,19 @@ export function SheetsDrawer({
         </div>
 
         <div className="space-y-5 overflow-y-auto px-5 py-4">
-          {/* Supabase Cloud Multi-User Card */}
+          {/* Akun & Penyimpanan Online */}
           <section className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h3 className="text-sm font-extrabold text-[var(--text-primary)]">
-                  Database Cloud & Akun Multi-User (Supabase)
+                  Akun &amp; Penyimpanan Online
                 </h3>
                 <p className="mt-0.5 text-xs text-[var(--text-muted)]">
                   {auth?.authenticated
-                    ? `Masuk sebagai ${auth.email || "User Cloud"} (terisolasi aman dengan RLS)`
+                    ? `Masuk sebagai ${auth.email || "Pengguna"} (data tersimpan aman dan pribadi)`
                     : auth?.configured
-                      ? "Supabase terdeteksi. Masuk atau daftar untuk menyimpan data di Cloud."
-                      : "Mode JSON Lokal aktif. Isi NEXT_PUBLIC_SUPABASE_URL & ANON_KEY di .env.local untuk mode Cloud."}
+                      ? "Masuk atau daftar agar catatan Anda tersimpan aman dan bisa dibuka di perangkat lain."
+                      : "Penyimpanan online belum diaktifkan di server ini. Catatan sementara tersimpan di perangkat ini."}
                 </p>
               </div>
               <span
@@ -394,10 +394,10 @@ export function SheetsDrawer({
                 }`}
               >
                 {auth?.authenticated
-                  ? "Cloud Aktif"
+                  ? "Sudah Masuk"
                   : auth?.configured
-                    ? "Siap Login"
-                    : "Mode Lokal"}
+                    ? "Belum Masuk"
+                    : "Di Perangkat"}
               </span>
             </div>
 
@@ -470,7 +470,7 @@ export function SheetsDrawer({
                     onChange={(e) => setMigrateLocalOnAuth(e.target.checked)}
                     className="rounded"
                   />
-                  <span>Salin transaksi lokal saat ini ke workspace Cloud setelah masuk</span>
+                  <span>Pindahkan catatan di perangkat ini ke akun saya setelah masuk</span>
                 </label>
 
                 {authInfoMsg && (
@@ -484,7 +484,7 @@ export function SheetsDrawer({
                   disabled={busy}
                   className="min-h-[40px] rounded-xl bg-[var(--brand-primary)] px-4 text-xs font-bold text-white hover:bg-[var(--brand-hover)] disabled:opacity-60"
                 >
-                  {authMode === "register" ? "Daftar & Buat Workspace Cloud" : "Masuk ke Workspace Cloud"}
+                  {authMode === "register" ? "Daftar & Buat Akun" : "Masuk ke Akun"}
                 </button>
               </form>
             )}
@@ -497,7 +497,7 @@ export function SheetsDrawer({
                   onClick={handleMigrateLocalToCloud}
                   className="min-h-[40px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3.5 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)] disabled:opacity-60"
                 >
-                  Salin Data Lokal ke Cloud
+                  Simpan Catatan Ini ke Akun
                 </button>
                 <button
                   type="button"
@@ -522,8 +522,8 @@ export function SheetsDrawer({
                   {sheetConnection.connected
                     ? `Terhubung ke ${sheetConnection.googleEmail || "akun Google"}`
                     : sheetConnection.configured
-                      ? "Siap dihubungkan dengan OAuth scope drive.file (non-sensitive)"
-                      : "Mode Lokal aktif. Isi GOOGLE_CLIENT_ID & GOOGLE_CLIENT_SECRET di .env.local untuk OAuth live."}
+                      ? "Siap dihubungkan ke Google Sheets milik Anda (hanya mengakses file buatan CatatCepat)."
+                      : "Koneksi Google Sheets belum aktif di server ini."}
                 </p>
               </div>
               <span
@@ -533,7 +533,7 @@ export function SheetsDrawer({
                     : "bg-[var(--bg-soft)] text-[var(--brand-primary)] dark:text-[#fda4af]"
                 }`}
               >
-                {sheetConnection.connected ? "Terhubung" : "Mode Lokal"}
+                {sheetConnection.connected ? "Terhubung" : "Belum Terhubung"}
               </span>
             </div>
 
@@ -584,7 +584,7 @@ export function SheetsDrawer({
                   onClick={handleConnectGoogle}
                   className="min-h-[42px] rounded-xl bg-[var(--brand-primary)] px-4 text-xs font-bold text-white hover:bg-[var(--brand-hover)] disabled:opacity-60"
                 >
-                  Hubungkan Google Sheets (OAuth)
+                  Hubungkan Google Sheets
                 </button>
               ) : (
                 <button
@@ -603,7 +603,7 @@ export function SheetsDrawer({
                 onClick={() => handleSyncOrPreview(false)}
                 className="min-h-[42px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-4 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)] disabled:opacity-60"
               >
-                {sheetConnection.connected ? "Sinkron Sekarang" : "Lihat Pratinjau Baris UUID"}
+                {sheetConnection.connected ? "Sinkron Sekarang" : "Lihat Pratinjau Tabel"}
               </button>
 
               {sheetConnection.connected && (
@@ -621,7 +621,7 @@ export function SheetsDrawer({
             {previewRows && (
               <div className="mt-3 overflow-x-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-2.5">
                 <p className="mb-1.5 text-[11px] font-bold text-[var(--text-muted)]">
-                  Pratinjau 8 kolom sinkronisasi (kunci UUID mencegah salah edit baris):
+                  Pratinjau susunan tabel di Google Sheets (baris yang diubah atau dihapus akan ikut menyesuaikan otomatis):
                 </p>
                 <table className="w-full text-left text-[11px] tabular-nums">
                   <tbody>
@@ -703,10 +703,10 @@ export function SheetsDrawer({
                 }
                 className="min-h-[42px] w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 text-xs font-bold text-[var(--text-primary)]"
               >
-                <option value="asn_karyawan">ASN & Karyawan (Gaji, TPP, TPG, Bonus)</option>
-                <option value="umum">Umum / Keluarga</option>
-                <option value="mahasiswa">Mahasiswa (Uang Saku, Kost)</option>
-                <option value="freelancer">Freelancer (Proyek, Retainer)</option>
+                <option value="umum">Umum / Keluarga (Gaji, Tunjangan, Bonus, Usaha Sampingan, Lain-lain)</option>
+                <option value="asn_karyawan">ASN / Karyawan (Gaji, Tunjangan, Bonus, THR, Lain-lain)</option>
+                <option value="mahasiswa">Mahasiswa (Uang Saku, Beasiswa, Lain-lain)</option>
+                <option value="freelancer">Freelance (Proyek Klien, Retainer, Royalti, Produk, Lain-lain)</option>
               </select>
             </div>
 
@@ -757,23 +757,23 @@ export function SheetsDrawer({
           {/* Legacy CSV Importer */}
           <section className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-4">
             <h3 className="text-sm font-extrabold text-[var(--text-primary)]">
-              Migrasi Data dari CatatCepat Lama (CSV)
+              Impor Data dari CatatCepat Lama
             </h3>
             <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-              Tempel isi file CSV hasil Export CSV dari versi GitHub Pages (Tanggal,Jenis,Nominal,Kategori,Keterangan).
+              Tempel isi file hasil unduhan CatatCepat versi sebelumnya (Tanggal,Jenis,Nominal,Kategori,Keterangan).
             </p>
             <label
               htmlFor="legacy-csv-input"
               className="mt-2 block text-xs font-bold text-[var(--text-muted)]"
             >
-              Isi Data CSV
+              Isi Data Catatan
             </label>
             <textarea
               id="legacy-csv-input"
               rows={3}
               value={csvText}
               onChange={(e) => setCsvText(e.target.value)}
-              placeholder={"Tanggal,Jenis,Nominal,Kategori,Keterangan\n16/11/2026,Keluar,25000,Makan & Minum,Nasi Padang"}
+              placeholder={"Tanggal,Jenis,Nominal,Kategori,Keterangan\n16-11-2026,Keluar,25000,Makan & Minum,Nasi Padang"}
               className="mt-1 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-2.5 text-xs text-[var(--text-primary)]"
             />
             <button
@@ -782,7 +782,7 @@ export function SheetsDrawer({
               onClick={handleImportCsv}
               className="mt-2 min-h-[40px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-4 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
             >
-              Impor Data CSV
+              Impor Data
             </button>
           </section>
 
@@ -800,7 +800,7 @@ export function SheetsDrawer({
                 onClick={() => setConfirmClear(true)}
                 className="text-xs font-bold text-[var(--expense-text)] hover:underline"
               >
-                Hapus semua data workspace
+                Hapus semua catatan saya
               </button>
             ) : (
               <div className="flex items-center gap-2">

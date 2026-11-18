@@ -73,7 +73,7 @@ export default function TermsPage() {
                 akun dompet, dan kategori sebelum menekan tombol simpan.
               </li>
               <li>
-                Pengguna dilarang menyalahgunakan endpoint API atau mencoba mengakses workspace pengguna
+                Pengguna dilarang mengganggu jalannya sistem atau mencoba mengakses data akun pengguna
                 lain.
               </li>
             </ul>
@@ -85,9 +85,9 @@ export default function TermsPage() {
             </h2>
             <p>
               Seluruh catatan transaksi dan file Google Sheets yang dibuat oleh CatatCepat tetap
-              menjadi milik Anda sepenuhnya. Anda dapat mengekspor catatan ke format CSV atau
-              memutus koneksi Google Sheets kapan saja. Apabila koneksi Google Sheets sedang terganggu
-              atau kuota Google API dibatasi sementara, data tetap tersimpan di workspace dan
+              menjadi milik Anda sepenuhnya. Anda dapat mengunduh catatan ke file tabel atau memutus
+              koneksi Google Sheets kapan saja. Apabila koneksi Google Sheets sedang terganggu atau
+              batas akses Google sedang penuh sementara, data tetap tersimpan aman di akun Anda dan
               disinkronkan kembali pada percobaan berikutnya.
             </p>
           </section>

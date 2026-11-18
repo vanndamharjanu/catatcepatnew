@@ -17,86 +17,64 @@ const DATA_DIR = process.env.VERCEL
   : path.join(process.cwd(), "data");
 const DB_PATH = path.join(DATA_DIR, "catatcepat-db.json");
 
+export const DEFAULT_EXPENSE_CATEGORIES: Array<{ name: string; iconKey: string }> = [
+  { name: "Makan & Minum", iconKey: "utensils" },
+  { name: "Transportasi & Bensin", iconKey: "bus" },
+  { name: "Listrik & Air", iconKey: "bolt" },
+  { name: "Pulsa & Kuota", iconKey: "phone" },
+  { name: "Kesehatan & Obat", iconKey: "heart" },
+  { name: "Sedekah & Donasi", iconKey: "gift" },
+  { name: "Belanja", iconKey: "bag" },
+  { name: "Pendidikan", iconKey: "cap" },
+  { name: "Lain-lain", iconKey: "tag" },
+];
+
 export const PRESET_CATEGORIES: Record<
   AppDatabase["settings"]["categoryPreset"],
   { keluar: Array<{ name: string; iconKey: string }>; masuk: Array<{ name: string; iconKey: string }> }
 > = {
   asn_karyawan: {
-    keluar: [
-      { name: "Makanan", iconKey: "utensils" },
-      { name: "Transportasi", iconKey: "bus" },
-      { name: "Kebutuhan Sehari-hari", iconKey: "basket" },
-      { name: "Kado", iconKey: "gift" },
-      { name: "Komunikasi", iconKey: "phone" },
-      { name: "Pembayaran", iconKey: "receipt" },
-      { name: "Tabungan", iconKey: "savings" },
-      { name: "Lain-lain", iconKey: "tag" },
-    ],
+    keluar: DEFAULT_EXPENSE_CATEGORIES,
     masuk: [
       { name: "Gaji", iconKey: "briefcase" },
-      { name: "TPP", iconKey: "medal" },
-      { name: "TPG", iconKey: "cap" },
+      { name: "Tunjangan", iconKey: "medal" },
       { name: "Bonus", iconKey: "star" },
+      { name: "THR", iconKey: "gift" },
       { name: "Lain-lain", iconKey: "tag" },
     ],
   },
   umum: {
-    keluar: [
-      { name: "Makanan", iconKey: "utensils" },
-      { name: "Transportasi", iconKey: "bus" },
-      { name: "Kebutuhan Sehari-hari", iconKey: "basket" },
-      { name: "Tagihan", iconKey: "receipt" },
-      { name: "Kesehatan", iconKey: "heart" },
-      { name: "Komunikasi", iconKey: "phone" },
-      { name: "Tabungan", iconKey: "savings" },
-      { name: "Lain-lain", iconKey: "tag" },
-    ],
+    keluar: DEFAULT_EXPENSE_CATEGORIES,
     masuk: [
-      { name: "Gaji Pokok", iconKey: "briefcase" },
+      { name: "Gaji", iconKey: "briefcase" },
       { name: "Tunjangan", iconKey: "medal" },
       { name: "Bonus", iconKey: "star" },
-      { name: "Usaha / Sampingan", iconKey: "bag" },
+      { name: "Usaha Sampingan", iconKey: "bag" },
       { name: "Lain-lain", iconKey: "tag" },
     ],
   },
   mahasiswa: {
-    keluar: [
-      { name: "Makan & Kopi", iconKey: "utensils" },
-      { name: "Transportasi", iconKey: "bus" },
-      { name: "Kost & Listrik", iconKey: "receipt" },
-      { name: "Kuliah & Buku", iconKey: "cap" },
-      { name: "Kuota & Pulsa", iconKey: "phone" },
-      { name: "Tabungan", iconKey: "savings" },
-      { name: "Lain-lain", iconKey: "tag" },
-    ],
+    keluar: DEFAULT_EXPENSE_CATEGORIES,
     masuk: [
       { name: "Uang Saku", iconKey: "wallet" },
       { name: "Beasiswa", iconKey: "cap" },
-      { name: "Part-time / Freelance", iconKey: "briefcase" },
-      { name: "Bonus", iconKey: "star" },
+      { name: "Lain-lain", iconKey: "tag" },
     ],
   },
   freelancer: {
-    keluar: [
-      { name: "Makanan", iconKey: "utensils" },
-      { name: "Transportasi", iconKey: "bus" },
-      { name: "Internet & Software", iconKey: "phone" },
-      { name: "Operasional Kerja", iconKey: "briefcase" },
-      { name: "Pajak & Cicilan", iconKey: "receipt" },
-      { name: "Tabungan", iconKey: "savings" },
-      { name: "Lain-lain", iconKey: "tag" },
-    ],
+    keluar: DEFAULT_EXPENSE_CATEGORIES,
     masuk: [
-      { name: "Proyek Klien", iconKey: "briefcase" },
+      { name: "Proyek Klien", iconKey: "laptop" },
       { name: "Retainer", iconKey: "medal" },
-      { name: "Royalti / Produk", iconKey: "star" },
+      { name: "Royalti", iconKey: "star" },
+      { name: "Produk", iconKey: "bag" },
       { name: "Lain-lain", iconKey: "tag" },
     ],
   },
 };
 
 function buildPresetCategoryList(preset: AppDatabase["settings"]["categoryPreset"]): CategoryItem[] {
-  const def = PRESET_CATEGORIES[preset] || PRESET_CATEGORIES.asn_karyawan;
+  const def = PRESET_CATEGORIES[preset] || PRESET_CATEGORIES.umum;
   return [
     ...def.keluar.map((c, idx) => ({ id: `cat-k-${idx}`, name: c.name, type: "Keluar" as const, iconKey: c.iconKey })),
     ...def.masuk.map((c, idx) => ({ id: `cat-m-${idx}`, name: c.name, type: "Masuk" as const, iconKey: c.iconKey })),
@@ -255,14 +233,14 @@ export function createInitialDb(): AppDatabase {
       monthlyBudget: 3_000_000,
       paydayDay: 25,
       plan: "free",
-      categoryPreset: "asn_karyawan",
+      categoryPreset: "umum",
     },
     accounts: [
       { id: "acc-cash", name: "Tunai", kind: "cash", initialBalance: 0 },
       { id: "acc-bank", name: "Rekening Bank", kind: "bank", initialBalance: 0 },
       { id: "acc-ewallet", name: "E-Wallet", kind: "ewallet", initialBalance: 0 },
     ],
-    categories: buildPresetCategoryList("asn_karyawan"),
+    categories: buildPresetCategoryList("umum"),
     goals: [],
     transactions: [],
     sheetConnection: {
@@ -385,7 +363,7 @@ export function buildSimulationTransactions(now: Date = new Date()): Transaction
       id: randomUUID(),
       date: shiftDate(3),
       type: "Keluar",
-      category: "Kebutuhan Sehari-hari",
+      category: "Belanja",
       accountId: "acc-ewallet",
       amount: 145_000,
       note: "[Contoh] Belanja kebutuhan harian",
@@ -398,7 +376,7 @@ export function buildSimulationTransactions(now: Date = new Date()): Transaction
       id: randomUUID(),
       date: shiftDate(2),
       type: "Keluar",
-      category: "Transportasi",
+      category: "Transportasi & Bensin",
       accountId: "acc-cash",
       amount: 35_000,
       note: "[Contoh] Bensin & parkir",
@@ -411,7 +389,7 @@ export function buildSimulationTransactions(now: Date = new Date()): Transaction
       id: randomUUID(),
       date: shiftDate(1),
       type: "Keluar",
-      category: "Makanan",
+      category: "Makan & Minum",
       accountId: "acc-ewallet",
       amount: 42_000,
       note: "[Contoh] Makan siang & kopi",
@@ -424,7 +402,7 @@ export function buildSimulationTransactions(now: Date = new Date()): Transaction
       id: randomUUID(),
       date: shiftDate(0),
       type: "Keluar",
-      category: "Makanan",
+      category: "Makan & Minum",
       accountId: "acc-cash",
       amount: 25_000,
       note: "[Contoh] Sarapan pagi",
@@ -474,8 +452,8 @@ export function parseLegacyCsv(csvText: string, defaultAccountId: string): Trans
     if (cols.length < 4) continue;
     const rawDate = cols[0];
     let isoDate = toIsoDate();
-    if (/^\d{2}\/\d{2}\/\d{4}$/.test(rawDate)) {
-      const [dd, mm, yyyy] = rawDate.split("/");
+    if (/^\d{2}[/-]\d{2}[/-]\d{4}$/.test(rawDate)) {
+      const [dd, mm, yyyy] = rawDate.split(/[/-]/);
       isoDate = `${yyyy}-${mm}-${dd}`;
     } else if (/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
       isoDate = rawDate;

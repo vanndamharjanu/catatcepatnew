@@ -12,11 +12,13 @@ import {
   computePeriodMetrics,
   computeStreak,
   countElapsedDays,
+  formatDisplayDate,
 } from "../src/lib/finance.ts";
 import { buildIncrementalSyncPlan, chunkRows, SHEET_HEADERS } from "../src/lib/google-sheets.ts";
 import { computeDbDiff } from "../src/lib/supabase.ts";
 import {
   createInitialDb,
+  DEFAULT_EXPENSE_CATEGORIES,
   deleteCategoryInDb,
   parseLegacyCsv,
   PRESET_CATEGORIES,
@@ -42,7 +44,7 @@ function runTests() {
   assert.equal(drafts.length, 4);
   assert.equal(drafts[0].amount, 25_000);
   assert.equal(drafts[0].accountId, "acc-ewallet");
-  assert.equal(drafts[0].category, "Makanan");
+  assert.equal(drafts[0].category, "Makan & Minum");
 
   assert.equal(drafts[1].amount, 90_000);
   assert.equal(drafts[1].accountId, "acc-cash");
@@ -177,15 +179,19 @@ function runTests() {
   assert.equal(metricsAfterReconcile.income, 3_000_000);
   assert.equal(metricsAfterReconcile.expense, 20_000);
 
-  // 6. Legacy CSV import compatibility
+  // 6. Legacy CSV import compatibility (both DD/MM/YYYY and DD-MM-YYYY) & DD-MM-YYYY display formatter
   const csvSample = [
     "Tanggal,Jenis,Nominal,Kategori,Keterangan",
     '"16/11/2026","Keluar",25000,"Makan & Minum","Nasi Padang"',
+    '"18-11-2026","Masuk",500000,"Bonus","Bonus Proyek"',
   ].join("\n");
   const imported = parseLegacyCsv(csvSample, "acc-cash");
-  assert.equal(imported.length, 1);
+  assert.equal(imported.length, 2);
   assert.equal(imported[0].date, "2026-11-16");
   assert.equal(imported[0].amount, 25_000);
+  assert.equal(imported[1].date, "2026-11-18");
+  assert.equal(imported[1].amount, 500_000);
+  assert.equal(formatDisplayDate("2026-11-18"), "18-11-2026");
 
   // 7. Daily-average divisor uses real elapsed days per period
   assert.equal(countElapsedDays(txs, "month", now), 17);
@@ -219,10 +225,41 @@ function runTests() {
   const seededBalances = computeAccountBalances(seededAccounts, txs);
   assert.equal(seededBalances.find((b) => b.id === "acc-cash")?.balance, 481_000);
 
-  // 10. Category icon options are unique and cover every preset category iconKey
+  // 10. Category icon options are unique and cover every preset category (9 shared expenses + role incomes)
   const iconKeys = CATEGORY_ICON_OPTIONS.map((o) => o.key);
   assert.equal(new Set(iconKeys).size, iconKeys.length);
+  assert.deepEqual(
+    DEFAULT_EXPENSE_CATEGORIES.map((c) => c.name),
+    [
+      "Makan & Minum",
+      "Transportasi & Bensin",
+      "Listrik & Air",
+      "Pulsa & Kuota",
+      "Kesehatan & Obat",
+      "Sedekah & Donasi",
+      "Belanja",
+      "Pendidikan",
+      "Lain-lain",
+    ],
+  );
+  assert.deepEqual(
+    PRESET_CATEGORIES.asn_karyawan.masuk.map((c) => c.name),
+    ["Gaji", "Tunjangan", "Bonus", "THR", "Lain-lain"],
+  );
+  assert.deepEqual(
+    PRESET_CATEGORIES.umum.masuk.map((c) => c.name),
+    ["Gaji", "Tunjangan", "Bonus", "Usaha Sampingan", "Lain-lain"],
+  );
+  assert.deepEqual(
+    PRESET_CATEGORIES.mahasiswa.masuk.map((c) => c.name),
+    ["Uang Saku", "Beasiswa", "Lain-lain"],
+  );
+  assert.deepEqual(
+    PRESET_CATEGORIES.freelancer.masuk.map((c) => c.name),
+    ["Proyek Klien", "Retainer", "Royalti", "Produk", "Lain-lain"],
+  );
   for (const preset of Object.values(PRESET_CATEGORIES)) {
+    assert.equal(preset.keluar.length, 9);
     for (const item of [...preset.keluar, ...preset.masuk]) {
       assert.ok(iconKeys.includes(item.iconKey as (typeof iconKeys)[number]), `Missing icon: ${item.iconKey}`);
     }

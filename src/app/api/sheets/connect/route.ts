@@ -7,8 +7,7 @@ export async function GET() {
     return NextResponse.json(
       {
         configured: false,
-        error:
-          "GOOGLE_CLIENT_ID dan GOOGLE_CLIENT_SECRET belum diisi di .env.local. Tambahkan kredensial Google Cloud Console untuk mengaktifkan OAuth langsung.",
+        error: "Koneksi Google Sheets belum aktif di server ini.",
       },
       { status: 400 },
     );

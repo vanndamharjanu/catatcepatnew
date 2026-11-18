@@ -6,6 +6,7 @@ import {
   computeDailyAllowance,
   computePeriodMetrics,
   computeStreak,
+  formatDisplayDate,
   formatRupiah,
   toIsoDate,
   type TimeRangeKey,
@@ -180,7 +181,7 @@ export function AppClient({ initialDb }: AppClientProps) {
     } else if (sheetsParam === "error") {
       setGlobalError(
         db.sheetConnection.lastError ||
-          "Gagal menghubungkan Google Sheets. Periksa izin Drive dan kredensial OAuth di .env.local.",
+          "Gagal menghubungkan Google Sheets. Silakan coba hubungkan kembali.",
       );
       window.history.replaceState({}, "", "/");
     }
@@ -216,7 +217,7 @@ export function AppClient({ initialDb }: AppClientProps) {
       } else if (errorDesc) {
         window.history.replaceState({}, "", window.location.pathname);
         setGlobalError(
-          `Login Google belum aktif (${errorDesc.replace(/\+/g, " ")}). Aktifkan provider Google di Supabase Dashboard > Authentication > Providers > Google.`,
+          `Login Google belum berhasil (${errorDesc.replace(/\+/g, " ")}). Silakan coba lagi atau masuk dengan email.`,
         );
       }
     }
@@ -840,7 +841,7 @@ export function AppClient({ initialDb }: AppClientProps) {
               Google Sheets
             </span>
             <span className="text-[11px] text-[var(--text-muted)]">
-              {db.sheetConnection.connected ? "Aktif" : "Lokal"}
+              {db.sheetConnection.connected ? "Aktif" : "Belum"}
             </span>
           </button>
 
@@ -885,10 +886,14 @@ export function AppClient({ initialDb }: AppClientProps) {
                 type="button"
                 onClick={() => setSheetsOpen(true)}
                 aria-label="Pengaturan Google Sheets dan anggaran"
-                className="flex h-10 min-w-10 items-center justify-center gap-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-card)] text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)] sm:px-3"
+                className="flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2.5 text-[11px] font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)] sm:px-3 sm:text-xs"
               >
-                <SheetIcon className="h-4 w-4 text-[var(--brand-primary)] dark:text-[#fda4af] sm:h-3.5 sm:w-3.5" />
-                <span className="hidden sm:inline">{db.sheetConnection.connected ? "Sheets Aktif" : "Sheets & Atur"}</span>
+                {db.sheetConnection.connected ? (
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-[#047857]" aria-hidden="true" />
+                ) : (
+                  <SheetIcon className="h-4 w-4 shrink-0 text-[var(--brand-primary)] dark:text-[#fda4af] sm:h-3.5 sm:w-3.5" />
+                )}
+                <span className="whitespace-nowrap">Sheets &amp; Atur</span>
               </button>
 
               <button
@@ -909,7 +914,7 @@ export function AppClient({ initialDb }: AppClientProps) {
             {db.auth?.configured && !db.auth?.authenticated && demoBypass && (
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-soft)] px-4 py-2.5 text-xs font-bold text-[var(--text-primary)]">
                 <span>
-                  Mode Demo Tamu: transaksi belum tersimpan ke akun Cloud pribadi Anda.
+                  Mode Demo Tamu: catatan bersifat sementara dan belum tersimpan ke akun Anda.
                 </span>
                 <button
                   type="button"
@@ -1352,7 +1357,7 @@ export function AppClient({ initialDb }: AppClientProps) {
                       onClick={handleExportCsv}
                       className="min-h-[38px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
                     >
-                      Export CSV
+                      Unduh Data
                     </button>
                     <button
                       type="button"
@@ -1414,7 +1419,7 @@ export function AppClient({ initialDb }: AppClientProps) {
                             </span>
                           </div>
                           <p className="mt-1 truncate text-xs text-[var(--text-muted)]">
-                            {tx.date} {tx.note ? `· ${tx.note}` : ""}
+                            {formatDisplayDate(tx.date)} {tx.note ? `· ${tx.note}` : ""}
                           </p>
                         </div>
 

@@ -548,10 +548,10 @@ export function TransactionSheet({
         return;
       }
       setAiDrafts(data.drafts);
-      setAiEngine(data.engine || "local-parser");
+      setAiEngine(data.engine || "otomatis");
       setAiWarning(data.warning || null);
     } catch {
-      setAiError("Gagal menghubungi layanan parser. Coba ulangi.");
+      setAiError("Gagal memproses catatan otomatis. Coba ulangi.");
     } finally {
       setAiBusy(false);
     }
@@ -1367,7 +1367,7 @@ export function TransactionSheet({
                       Hasil Deteksi ({aiDrafts.length} transaksi)
                     </span>
                     <span className="rounded-lg bg-[var(--bg-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--text-muted)]">
-                      {aiEngine === "gemini" || aiEngine === "gateway" ? "Guri AI" : "Parser Lokal"}
+                      {aiEngine === "gemini" || aiEngine === "gateway" ? "Guri AI" : "Mode Otomatis"}
                     </span>
                   </div>
 

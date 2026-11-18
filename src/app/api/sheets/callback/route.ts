@@ -22,7 +22,7 @@ export async function GET(request: Request) {
     const grantedScope = searchParams.get("scope") || "";
     if (grantedScope && !grantedScope.includes("drive.file")) {
       throw new Error(
-        "Izin Google Drive (drive.file) belum dicentang di layar persetujuan Google. Silakan ulangi dan centang kotak izin file Google Drive sebelum klik Lanjutkan.",
+        "Izin akses Google Drive belum dicentang di layar persetujuan Google. Silakan ulangi dan centang kotak izin file Google Drive sebelum klik Lanjutkan.",
       );
     }
 

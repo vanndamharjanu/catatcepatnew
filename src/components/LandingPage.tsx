@@ -2,7 +2,7 @@
 
 import React, { useRef, useState } from "react";
 import Link from "next/link";
-import { formatRupiah, toIsoDate } from "@/lib/finance";
+import { formatDisplayDate, formatRupiah, toIsoDate } from "@/lib/finance";
 import { APP_SLOGAN, type AppDatabase } from "@/lib/types";
 import { ThemeIcon } from "./Icons";
 import { OctopusMascot } from "./OctopusMascot";
@@ -28,8 +28,8 @@ const CHAT_EXAMPLES = [
     label: "Jajan & Parkir",
     prompt: "Ngopi 25rb pake ewallet, parkir 2rb tunai",
     rows: [
-      { category: "Makanan", note: "Ngopi", account: "E-Wallet", type: "Keluar" as const, amount: 25_000 },
-      { category: "Transportasi", note: "Parkir", account: "Tunai", type: "Keluar" as const, amount: 2_000 },
+      { category: "Makan & Minum", note: "Ngopi", account: "E-Wallet", type: "Keluar" as const, amount: 25_000 },
+      { category: "Transportasi & Bensin", note: "Parkir", account: "Tunai", type: "Keluar" as const, amount: 2_000 },
     ],
   },
   {
@@ -45,7 +45,7 @@ const CHAT_EXAMPLES = [
     label: "Belanja Harian",
     prompt: "Belanja kebutuhan rumah 145rb qris",
     rows: [
-      { category: "Kebutuhan Sehari-hari", note: "Belanja kebutuhan rumah", account: "E-Wallet", type: "Keluar" as const, amount: 145_000 },
+      { category: "Belanja", note: "Belanja kebutuhan rumah", account: "E-Wallet", type: "Keluar" as const, amount: 145_000 },
     ],
   },
 ];
@@ -75,7 +75,7 @@ export function LandingPage({
   const sampleRemaining = Math.max(0, activeSample.budget - activeSample.spent);
   const sampleDailyAllowance = Math.floor(sampleRemaining / activeSample.daysLeft);
   const activeChatExample = CHAT_EXAMPLES[chatExampleIdx] ?? CHAT_EXAMPLES[0];
-  const todayIso = toIsoDate();
+  const todayDisplay = formatDisplayDate(toIsoDate());
 
   const handleFocusLogin = () => {
     emailInputRef.current?.focus();
@@ -135,7 +135,7 @@ export function LandingPage({
         onAuthSuccess(
           data.state,
           authMode === "register"
-            ? "Workspace Cloud berhasil dibuat."
+            ? "Akun berhasil dibuat."
             : `Selamat datang kembali, ${data.state.auth?.email || email}.`,
         );
       }
@@ -298,7 +298,7 @@ export function LandingPage({
                 Masuk atau Buat Akun
               </h2>
               <p className="mt-1 text-xs text-[var(--text-muted)]">
-                Data tiap akun terpisah aman dengan autentikasi Supabase.
+                Data tiap akun tersimpan pribadi dan aman.
               </p>
 
               <div className="mt-4">
@@ -435,7 +435,7 @@ export function LandingPage({
                       className="h-4 w-4 rounded"
                     />
                     <span>
-                      Bawa {db.transactions.length} transaksi lokal ke akun Cloud
+                      Pindahkan {db.transactions.length} catatan di perangkat ini ke akun saya
                     </span>
                   </label>
                 )}
@@ -466,8 +466,8 @@ export function LandingPage({
                   {busy
                     ? "Memproses..."
                     : authMode === "register"
-                      ? "Buat Workspace Baru"
-                      : "Masuk ke Workspace"}
+                      ? "Buat Akun Baru"
+                      : "Masuk ke Akun"}
                 </button>
               </form>
 
@@ -580,12 +580,9 @@ export function LandingPage({
                 Data Tetap Milik Anda di Google Sheets Pribadi
               </h2>
               <p className="mt-1.5 text-xs leading-relaxed text-[var(--text-muted)] sm:text-sm">
-                CatatCepat hanya mengakses 1 file spreadsheet buatannya sendiri (izin{" "}
-                <code className="rounded bg-[var(--bg-soft)] px-1.5 py-0.5 font-bold text-[var(--text-primary)]">
-                  drive.file
-                </code>
-                ), tidak membaca file Drive Anda yang lain. Tiap baris memakai{" "}
-                <strong>Transaction ID (UUID)</strong> agar edit atau hapus selalu akurat.
+                CatatCepat hanya mengakses 1 file Google Sheets buatannya sendiri, tidak melihat atau
+                membaca file Google Drive Anda yang lain. Setiap baris punya kode catatan unik agar
+                edit atau hapus selalu akurat.
               </p>
             </div>
 
@@ -602,7 +599,7 @@ export function LandingPage({
             <table className="w-full text-left text-xs tabular-nums">
               <thead>
                 <tr className="border-b border-[var(--border-subtle)] font-extrabold text-[var(--text-primary)]">
-                  <th className="whitespace-nowrap px-2.5 py-2">Transaction ID</th>
+                  <th className="whitespace-nowrap px-2.5 py-2">Kode Catatan</th>
                   <th className="whitespace-nowrap px-2.5 py-2">Tanggal</th>
                   <th className="whitespace-nowrap px-2.5 py-2">Jenis</th>
                   <th className="whitespace-nowrap px-2.5 py-2">Kategori</th>
@@ -613,8 +610,8 @@ export function LandingPage({
               </thead>
               <tbody className="divide-y divide-[var(--border-subtle)] text-[var(--text-muted)]">
                 <tr>
-                  <td className="whitespace-nowrap px-2.5 py-2 font-mono text-[11px]">9c20ed42...</td>
-                  <td className="whitespace-nowrap px-2.5 py-2">{todayIso}</td>
+                  <td className="whitespace-nowrap px-2.5 py-2 font-mono text-[11px]">CC-9C20ED42</td>
+                  <td className="whitespace-nowrap px-2.5 py-2">{todayDisplay}</td>
                   <td className="whitespace-nowrap px-2.5 py-2 font-bold text-[var(--income-text)]">Masuk</td>
                   <td className="whitespace-nowrap px-2.5 py-2">Gaji</td>
                   <td className="whitespace-nowrap px-2.5 py-2">Rekening Bank</td>
@@ -622,10 +619,10 @@ export function LandingPage({
                   <td className="whitespace-nowrap px-2.5 py-2">Gaji bulanan</td>
                 </tr>
                 <tr>
-                  <td className="whitespace-nowrap px-2.5 py-2 font-mono text-[11px]">4f18ab19...</td>
-                  <td className="whitespace-nowrap px-2.5 py-2">{todayIso}</td>
+                  <td className="whitespace-nowrap px-2.5 py-2 font-mono text-[11px]">CC-4F18AB19</td>
+                  <td className="whitespace-nowrap px-2.5 py-2">{todayDisplay}</td>
                   <td className="whitespace-nowrap px-2.5 py-2 font-bold text-[var(--expense-text)]">Keluar</td>
-                  <td className="whitespace-nowrap px-2.5 py-2">Makanan</td>
+                  <td className="whitespace-nowrap px-2.5 py-2">Makan &amp; Minum</td>
                   <td className="whitespace-nowrap px-2.5 py-2">E-Wallet</td>
                   <td className="whitespace-nowrap px-2.5 py-2 font-bold text-[var(--text-primary)]">28000</td>
                   <td className="whitespace-nowrap px-2.5 py-2">Makan siang QRIS</td>
