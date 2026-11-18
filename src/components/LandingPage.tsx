@@ -198,7 +198,7 @@ export function LandingPage({
       <header className="sticky top-0 z-30 border-b border-[var(--border-subtle)] bg-[var(--nav-bg)] px-4 py-3 backdrop-blur-sm sm:px-8">
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-x-3 gap-y-2 sm:flex-nowrap">
           <div className="flex min-w-[165px] items-center gap-2.5 sm:gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--brand-primary)] text-white sm:h-10 sm:w-10">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-soft)] sm:h-10 sm:w-10">
               <OctopusMascot mood="saving" size={32} />
             </div>
             <div className="min-w-0">
@@ -245,22 +245,6 @@ export function LandingPage({
               <span className="ml-1.5 hidden sm:inline">
                 {darkMode ? "Terang" : "Gelap"}
               </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={onEnterDemo}
-              className="min-h-[40px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)] sm:min-h-[42px]"
-            >
-              Demo
-            </button>
-
-            <button
-              type="button"
-              onClick={() => openAuthModal("login")}
-              className="min-h-[40px] rounded-xl bg-[var(--brand-primary)] px-3.5 text-xs font-extrabold text-white hover:bg-[var(--brand-hover)] sm:min-h-[42px]"
-            >
-              Masuk
             </button>
           </div>
         </div>
@@ -559,7 +543,7 @@ export function LandingPage({
               CatatCepat
             </span>
             <span className="mx-2">·</span>
-            <span>{APP_SLOGAN} (catatcepat.web.id)</span>
+            <span>{APP_SLOGAN}</span>
           </div>
 
           <div className="flex flex-wrap items-center gap-4 font-bold">

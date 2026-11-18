@@ -28,6 +28,7 @@ import {
   MonthlyTrendChart,
 } from "./Charts";
 import {
+  CategoryIcon,
   ChartIcon,
   CloseIcon,
   EyeIcon,
@@ -837,7 +838,7 @@ export function AppClient({ initialDb }: AppClientProps) {
       {/* Desktop Left Navigation Rail (Reflows from mobile bottom dock per antislop-layoutmobile) */}
       <aside className="no-print hidden md:flex md:w-64 md:shrink-0 md:flex-col md:border-r md:border-[var(--border-subtle)] md:bg-[var(--bg-card)] md:p-4">
         <div className="flex items-center gap-2.5 px-2 py-2">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--brand-primary)] text-white">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-soft)]">
             <OctopusMascot mood="saving" size={34} />
           </div>
           <div>
@@ -881,10 +882,6 @@ export function AppClient({ initialDb }: AppClientProps) {
         </nav>
 
         <div className="space-y-2.5 border-t border-[var(--border-subtle)] pt-4">
-          <div className="flex justify-center">
-            <ThemeDots compact showLabel={false} value={themeColor} onChange={handleChangeTheme} />
-          </div>
-
           <button
             type="button"
             onClick={() => openSheetsTab("sheets")}
@@ -912,11 +909,11 @@ export function AppClient({ initialDb }: AppClientProps) {
 
       {/* Main Content Area */}
       <div className="flex-1 pb-24 md:pb-8">
-        {/* Top Mobile/Tablet Bar */}
+        {/* Top Bar */}
         <header className="no-print sticky top-0 z-30 border-b border-[var(--border-subtle)] bg-[var(--nav-bg)] px-4 py-3 backdrop-blur-sm md:px-8">
           <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-x-2.5 gap-y-2 sm:flex-nowrap">
             <div className="flex min-w-[165px] items-center gap-2.5">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--brand-primary)] md:hidden">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-soft)]">
                 <OctopusMascot mood="saving" size={30} />
               </div>
               <div className="min-w-0">
@@ -1073,15 +1070,13 @@ export function AppClient({ initialDb }: AppClientProps) {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <div className="md:hidden">
-                    <ThemeDots
-                      compact
-                      showLabel={false}
-                      value={themeColor}
-                      onChange={handleChangeTheme}
-                    />
-                  </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <ThemeDots
+                    compact
+                    showLabel={false}
+                    value={themeColor}
+                    onChange={handleChangeTheme}
+                  />
                   <button
                     type="button"
                     onClick={() => setHideNumbers((v) => !v)}
@@ -1462,35 +1457,52 @@ export function AppClient({ initialDb }: AppClientProps) {
                     const toAccName = tx.toAccountId
                       ? db.accounts.find((a) => a.id === tx.toAccountId)?.name
                       : null;
+                    const catIconKey =
+                      db.categories.find(
+                        (c) => c.name === tx.category && c.type === tx.type,
+                      )?.iconKey || (tx.type === "Transfer" ? "wallet" : "tag");
 
                     return (
                       <article
                         key={tx.id}
                         className="flex flex-col justify-between gap-2 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-3.5 sm:flex-row sm:items-center"
                       >
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span
-                              className={`rounded-lg px-2 py-0.5 text-[11px] font-bold ${
-                                tx.type === "Masuk"
-                                  ? "bg-[var(--income-bg)] text-[var(--income-text)]"
-                                  : tx.type === "Keluar"
-                                    ? "bg-[var(--expense-bg)] text-[var(--expense-text)]"
-                                    : "bg-[var(--bg-soft)] text-[var(--text-primary)]"
-                              }`}
-                            >
-                              {tx.type}
-                            </span>
-                            <span className="text-sm font-extrabold text-[var(--text-primary)]">
-                              {tx.category}
-                            </span>
-                            <span className="text-xs text-[var(--text-muted)]">
-                              {toAccName ? `${accName} -> ${toAccName}` : accName}
-                            </span>
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span
+                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+                              tx.type === "Masuk"
+                                ? "bg-[var(--income-bg)] text-[var(--income-text)]"
+                                : tx.type === "Keluar"
+                                  ? "bg-[var(--expense-bg)] text-[var(--expense-text)]"
+                                  : "bg-[var(--bg-soft)] text-[var(--brand-primary)] dark:text-[#fda4af]"
+                            }`}
+                          >
+                            <CategoryIcon iconKey={catIconKey} className="h-4 w-4" />
+                          </span>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span
+                                className={`rounded-lg px-2 py-0.5 text-[11px] font-bold ${
+                                  tx.type === "Masuk"
+                                    ? "bg-[var(--income-bg)] text-[var(--income-text)]"
+                                    : tx.type === "Keluar"
+                                      ? "bg-[var(--expense-bg)] text-[var(--expense-text)]"
+                                      : "bg-[var(--bg-soft)] text-[var(--text-primary)]"
+                                }`}
+                              >
+                                {tx.type}
+                              </span>
+                              <span className="text-sm font-extrabold text-[var(--text-primary)]">
+                                {tx.category}
+                              </span>
+                              <span className="text-xs text-[var(--text-muted)]">
+                                {toAccName ? `${accName} -> ${toAccName}` : accName}
+                              </span>
+                            </div>
+                            <p className="mt-1 truncate text-xs text-[var(--text-muted)]">
+                              {formatDisplayDate(tx.date)} {tx.note ? `· ${tx.note}` : ""}
+                            </p>
                           </div>
-                          <p className="mt-1 truncate text-xs text-[var(--text-muted)]">
-                            {formatDisplayDate(tx.date)} {tx.note ? `· ${tx.note}` : ""}
-                          </p>
                         </div>
 
                         <div className="flex items-center justify-between gap-3 sm:justify-end">

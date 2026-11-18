@@ -115,8 +115,10 @@ export function TransactionForm({
   const [toAccountId, setToAccountId] = useState<string>(accounts[1]?.id || "acc-bank");
   const [note, setNote] = useState<string>("");
 
-  // Category manager inline state
+  // Category dropdown & manager inline state
+  const [catDropdownOpen, setCatDropdownOpen] = useState(false);
   const [managingCats, setManagingCats] = useState(false);
+  const catDropdownRef = useRef<HTMLDivElement | null>(null);
   const [newCatName, setNewCatName] = useState("");
   const [newCatIcon, setNewCatIcon] = useState("tag");
   const [editingCatId, setEditingCatId] = useState<string | null>(null);
@@ -180,6 +182,7 @@ export function TransactionForm({
 
     setFormError(null);
     setAiError(null);
+    setCatDropdownOpen(false);
     setManagingCats(false);
     setNewCatName("");
     setNewCatIcon("tag");
@@ -216,6 +219,7 @@ export function TransactionForm({
 
   // Clear category edit/delete state when switching transaction type
   useEffect(() => {
+    setCatDropdownOpen(false);
     setEditingCatId(null);
     setEditCatName("");
     setDeletingCatId(null);
@@ -223,6 +227,25 @@ export function TransactionForm({
     setDragIds(null);
     setActiveDragId(null);
   }, [txType]);
+
+  // Close category icon dropdown when clicking outside or pressing Escape
+  useEffect(() => {
+    if (!catDropdownOpen) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (catDropdownRef.current && !catDropdownRef.current.contains(e.target as Node)) {
+        setCatDropdownOpen(false);
+      }
+    };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setCatDropdownOpen(false);
+    };
+    document.addEventListener("mousedown", handleOutside);
+    document.addEventListener("keydown", handleEsc);
+    return () => {
+      document.removeEventListener("mousedown", handleOutside);
+      document.removeEventListener("keydown", handleEsc);
+    };
+  }, [catDropdownOpen]);
 
   // Ensure window pointer listeners are cleaned up on unmount or leaving manage mode
   useEffect(() => {
@@ -799,6 +822,7 @@ export function TransactionForm({
                 <button
                   type="button"
                   onClick={() => {
+                    setCatDropdownOpen(false);
                     setManagingCats((v) => !v);
                     setEditingCatId(null);
                     setEditCatName("");
@@ -810,18 +834,92 @@ export function TransactionForm({
                 </button>
               </div>
 
-              <select
-                id={`${idPrefix}tx-category`}
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="min-h-[42px] w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-xs font-bold text-[var(--text-primary)]"
-              >
-                {filteredCats.map((cat) => (
-                  <option key={cat.id} value={cat.name}>
-                    {cat.name}
-                  </option>
-                ))}
-              </select>
+              {(() => {
+                const selectedCat =
+                  filteredCats.find((c) => c.name === category) ?? filteredCats[0];
+                return (
+                  <div ref={catDropdownRef} className="relative">
+                    <button
+                      id={`${idPrefix}tx-category`}
+                      type="button"
+                      aria-haspopup="listbox"
+                      aria-expanded={catDropdownOpen}
+                      onClick={() => setCatDropdownOpen((v) => !v)}
+                      className="flex min-h-[42px] w-full items-center justify-between gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 text-left text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]/50"
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--bg-soft)] text-[var(--brand-primary)] dark:text-[#fda4af]">
+                          <CategoryIcon
+                            iconKey={selectedCat?.iconKey || "tag"}
+                            className="h-4 w-4"
+                          />
+                        </span>
+                        <span className="truncate">
+                          {selectedCat?.name || category || "Pilih kategori"}
+                        </span>
+                      </span>
+                      <svg
+                        className={`h-4 w-4 shrink-0 text-[var(--text-muted)] transition-transform ${
+                          catDropdownOpen ? "rotate-180" : ""
+                        }`}
+                        viewBox="0 0 20 20"
+                        fill="none"
+                        aria-hidden="true"
+                      >
+                        <path
+                          d="M5 7.5L10 12.5L15 7.5"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </button>
+
+                    {catDropdownOpen && (
+                      <div
+                        role="listbox"
+                        aria-label="Daftar kategori"
+                        className="absolute left-0 right-0 top-full z-30 mt-1.5 max-h-60 overflow-y-auto rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-2 shadow-xl"
+                      >
+                        <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                          {filteredCats.map((cat) => {
+                            const selected = cat.name === category;
+                            return (
+                              <button
+                                key={cat.id}
+                                type="button"
+                                role="option"
+                                aria-selected={selected}
+                                onClick={() => {
+                                  setCategory(cat.name);
+                                  setCatDropdownOpen(false);
+                                }}
+                                className={`flex min-h-[40px] w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-left text-xs font-bold transition-colors ${
+                                  selected
+                                    ? "bg-[var(--brand-primary)] text-white"
+                                    : "text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
+                                }`}
+                              >
+                                <span
+                                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
+                                    selected
+                                      ? "bg-white/20 text-white"
+                                      : "bg-[var(--bg-soft)] text-[var(--brand-primary)] dark:text-[#fda4af]"
+                                  }`}
+                                >
+                                  <CategoryIcon iconKey={cat.iconKey} className="h-4 w-4" />
+                                </span>
+                                <span className="truncate">{cat.name}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Expandable Full Category Manager */}
               {managingCats && (

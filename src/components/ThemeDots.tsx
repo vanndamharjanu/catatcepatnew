@@ -21,12 +21,12 @@ export function ThemeDots({
     <div
       role="group"
       aria-label="Pilih warna tema aplikasi"
-      className={`inline-flex items-center gap-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-card)] ${
-        compact ? "px-2 py-1" : "px-3 py-1.5"
+      className={`inline-flex flex-wrap items-center rounded-full border border-[var(--border-subtle)] bg-[var(--bg-card)] ${
+        compact ? "gap-2.5 px-3 py-1.5" : "gap-2.5 px-3.5 py-2 sm:gap-3.5 sm:px-4"
       }`}
     >
       {showLabel && (
-        <span className="mr-0.5 text-[11px] font-bold text-[var(--text-muted)]">
+        <span className="mr-1 text-[11px] font-bold text-[var(--text-muted)]">
           Tema:
         </span>
       )}
@@ -41,8 +41,8 @@ export function ThemeDots({
             aria-pressed={active}
             title={`Tema ${opt.label}`}
             style={{ backgroundColor: opt.swatch }}
-            className={`relative rounded-full transition-transform after:absolute after:-inset-1.5 after:content-[""] ${
-              compact ? "h-5 w-5" : "h-6 w-6"
+            className={`relative shrink-0 rounded-full transition-transform after:content-[""] ${
+              compact ? "h-5 w-5 after:absolute after:-inset-1" : "h-6 w-6 after:absolute after:-inset-1.5"
             } ${
               active
                 ? "scale-110 ring-2 ring-[var(--text-primary)] ring-offset-2 ring-offset-[var(--bg-card)]"
