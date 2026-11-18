@@ -238,6 +238,20 @@ export function SheetsDrawer({
     : 0;
   const totalPendingCount = pendingTxCount + pendingDeleteCount;
 
+  const handleSupabaseGoogleLogin = async () => {
+    setBusy(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch("/api/auth?provider=google");
+      const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
+      if (!res.ok || !data.url) throw new Error(data.error || "Gagal memulai login Google.");
+      window.location.href = data.url;
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Gagal memulai login Google.");
+      setBusy(false);
+    }
+  };
+
   const handleSupabaseAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
@@ -394,6 +408,15 @@ export function SheetsDrawer({
 
             {auth?.configured && !auth?.authenticated && (
               <form onSubmit={handleSupabaseAuth} className="mt-3 space-y-2.5">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={handleSupabaseGoogleLogin}
+                  className="flex min-h-[42px] w-full items-center justify-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3.5 text-xs font-extrabold text-[var(--text-primary)] hover:bg-[var(--bg-soft)] disabled:opacity-60"
+                >
+                  <span>Lanjutkan dengan Akun Google</span>
+                </button>
+
                 <div className="flex gap-1.5 rounded-xl bg-[var(--bg-card)] p-1 text-xs font-bold">
                   <button
                     type="button"

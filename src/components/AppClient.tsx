@@ -40,6 +40,7 @@ import {
   TransferIcon,
 } from "./Icons";
 import { GuriHabitatCard, OctopusMascot, type GuriMood } from "./OctopusMascot";
+import { LandingPage } from "./LandingPage";
 import { SheetsDrawer } from "./SheetsDrawer";
 import { TransactionSheet } from "./TransactionSheet";
 
@@ -55,6 +56,7 @@ export function AppClient({ initialDb }: AppClientProps) {
   const [timeRange, setTimeRange] = useState<TimeRangeKey>("month");
   const [hideNumbers, setHideNumbers] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+  const [demoBypass, setDemoBypass] = useState(false);
 
   // Modals & sheets
   const [txSheetOpen, setTxSheetOpen] = useState(false);
@@ -177,6 +179,42 @@ export function AppClient({ initialDb }: AppClientProps) {
     } else if (sheetsParam === "error") {
       setGlobalError("Gagal menghubungkan Google Sheets. Periksa kredensial OAuth di .env.local.");
       window.history.replaceState({}, "", "/");
+    }
+
+    if (window.location.hash.length > 1) {
+      const hashParams = new URLSearchParams(window.location.hash.slice(1));
+      const accessToken = hashParams.get("access_token");
+      const refreshToken = hashParams.get("refresh_token") || "";
+      const errorDesc = hashParams.get("error_description") || hashParams.get("error");
+      if (accessToken) {
+        window.history.replaceState({}, "", window.location.pathname);
+        void fetch("/api/auth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "session_from_tokens",
+            accessToken,
+            refreshToken,
+          }),
+        })
+          .then((r) => r.json())
+          .then((data: { state?: AppDatabase; error?: string }) => {
+            if (data.state) {
+              setDb(data.state);
+              showToast(`Masuk dengan Google sebagai ${data.state.auth?.email || "User"}.`);
+            } else if (data.error) {
+              setGlobalError(data.error);
+            }
+          })
+          .catch(() => {
+            setGlobalError("Gagal menyimpan sesi login Google.");
+          });
+      } else if (errorDesc) {
+        window.history.replaceState({}, "", window.location.pathname);
+        setGlobalError(
+          `Login Google belum aktif (${errorDesc.replace(/\+/g, " ")}). Aktifkan provider Google di Supabase Dashboard > Authentication > Providers > Google.`,
+        );
+      }
     }
   }, []);
 
@@ -715,6 +753,30 @@ export function AppClient({ initialDb }: AppClientProps) {
     ? parseInt(statFilterMode.slice(0, 4), 10)
     : new Date().getFullYear();
 
+  const showLandingPage = Boolean(
+    db.auth?.configured && !db.auth?.authenticated && !demoBypass,
+  );
+
+  if (showLandingPage) {
+    return (
+      <LandingPage
+        db={db}
+        darkMode={darkMode}
+        onToggleDarkMode={toggleDarkMode}
+        initialError={globalError}
+        onAuthSuccess={(nextDb, msg) => {
+          setDb(nextDb);
+          setGlobalError(null);
+          showToast(msg);
+        }}
+        onEnterDemo={() => {
+          setDemoBypass(true);
+          showToast("Mode Demo dibuka. Masuk akun kapan saja untuk menyimpan ke Cloud.");
+        }}
+      />
+    );
+  }
+
   return (
     <div className="min-h-dvh bg-[var(--bg-canvas)] text-[var(--text-primary)] md:flex">
       {/* Desktop Left Navigation Rail (Reflows from mobile bottom dock per antislop-layoutmobile) */}
@@ -840,6 +902,20 @@ export function AppClient({ initialDb }: AppClientProps) {
         {/* Feedback Toast & Global Error */}
         <div className="px-4 pt-3 md:px-8">
           <div className="mx-auto max-w-4xl">
+            {db.auth?.configured && !db.auth?.authenticated && demoBypass && (
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-soft)] px-4 py-2.5 text-xs font-bold text-[var(--text-primary)]">
+                <span>
+                  Mode Demo Tamu: transaksi belum tersimpan ke akun Cloud pribadi Anda.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setDemoBypass(false)}
+                  className="min-h-[44px] rounded-xl bg-[var(--brand-primary)] px-3.5 py-2 text-xs font-extrabold text-white hover:bg-[var(--brand-hover)]"
+                >
+                  Masuk / Daftar Akun
+                </button>
+              </div>
+            )}
             {toast && (
               <div
                 role="status"

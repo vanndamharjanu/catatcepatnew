@@ -11,6 +11,8 @@ import {
 import {
   CC_ACCESS_COOKIE,
   CC_REFRESH_COOKIE,
+  getSupabaseConfig,
+  getSupabaseUser,
   isSupabaseConfigured,
   readSupabaseWorkspace,
   signInWithSupabasePassword,
@@ -18,13 +20,33 @@ import {
   writeSupabaseWorkspaceDelta,
 } from "@/lib/supabase";
 
+export async function GET(request: Request) {
+  const cfg = getSupabaseConfig();
+  if (!cfg) {
+    return NextResponse.json(
+      {
+        error:
+          "Supabase belum dikonfigurasi. Isi NEXT_PUBLIC_SUPABASE_URL dan NEXT_PUBLIC_SUPABASE_ANON_KEY di .env.local.",
+      },
+      { status: 400 },
+    );
+  }
+  const { searchParams } = new URL(request.url);
+  const provider = searchParams.get("provider") || "google";
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/+$/, "");
+  const authUrl = `${cfg.url}/auth/v1/authorize?provider=${encodeURIComponent(provider)}&redirect_to=${encodeURIComponent(appUrl)}`;
+  return NextResponse.json({ url: authUrl });
+}
+
 export async function POST(request: Request) {
   try {
     const body = (await request.json().catch(() => ({}))) as {
-      action?: "login" | "register" | "logout" | "migrate_local";
+      action?: "login" | "register" | "logout" | "migrate_local" | "session_from_tokens";
       email?: string;
       password?: string;
       migrateLocal?: boolean;
+      accessToken?: string;
+      refreshToken?: string;
     };
 
     const cookieStore = await cookies();
@@ -43,6 +65,36 @@ export async function POST(request: Request) {
         },
         { status: 400 },
       );
+    }
+
+    if (body.action === "session_from_tokens") {
+      const accessToken = (body.accessToken || "").trim();
+      const refreshToken = (body.refreshToken || "").trim();
+      if (!accessToken) {
+        return NextResponse.json({ error: "Token sesi OAuth tidak ditemukan." }, { status: 400 });
+      }
+      const user = await getSupabaseUser(accessToken);
+      if (!user) {
+        return NextResponse.json({ error: "Token sesi Google OAuth tidak valid atau kedaluwarsa." }, { status: 401 });
+      }
+      cookieStore.set(CC_ACCESS_COOKIE, accessToken, {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 7,
+      });
+      if (refreshToken) {
+        cookieStore.set(CC_REFRESH_COOKIE, refreshToken, {
+          httpOnly: true,
+          sameSite: "lax",
+          path: "/",
+          maxAge: 60 * 60 * 24 * 30,
+        });
+      }
+      const session = { accessToken, refreshToken, user };
+      const { db } = await readSupabaseWorkspace(session, createInitialDb());
+      recomputeGoalAmounts(db);
+      return NextResponse.json({ state: toPublicState(db) });
     }
 
     if (body.action === "migrate_local") {
