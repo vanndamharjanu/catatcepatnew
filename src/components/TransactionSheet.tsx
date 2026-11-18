@@ -27,6 +27,8 @@ interface TransactionSheetProps {
   initialAccountId?: string;
   editingTx?: Transaction | null;
   accounts: Account[];
+  /** Current balance per account id, used to warn before a balance goes negative. */
+  balances?: Record<string, number>;
   categories: CategoryItem[];
   onClose: () => void;
   onSaveSingle: (payload: {
@@ -80,6 +82,7 @@ export function TransactionSheet({
   initialAccountId,
   editingTx = null,
   accounts,
+  balances,
   categories,
   onClose,
   onSaveSingle,
@@ -148,7 +151,7 @@ export function TransactionSheet({
       setAiDrafts([]);
       setAiEngine(null);
     }
-  }, [open, editingTx, initialTab, initialType, accounts, categories]);
+  }, [open, editingTx, initialTab, initialType, initialAccountId, accounts, categories]);
 
   // Keep selected category aligned when toggling Keluar <-> Masuk
   useEffect(() => {
@@ -174,6 +177,50 @@ export function TransactionSheet({
   if (!open) return null;
 
   const numericAmount = parseInt(amountRaw.replace(/\D/g, ""), 10) || 0;
+
+  // When editing, adjust out the original transaction's effect before checking the updated balance.
+  let effectiveBalance = balances?.[accountId];
+  if (effectiveBalance !== undefined && editingTx) {
+    if (editingTx.accountId === accountId) {
+      if (editingTx.type === "Keluar" || editingTx.type === "Transfer") {
+        effectiveBalance += editingTx.amount;
+      } else if (editingTx.type === "Masuk") {
+        effectiveBalance -= editingTx.amount;
+      }
+    } else if (editingTx.type === "Transfer" && editingTx.toAccountId === accountId) {
+      effectiveBalance -= editingTx.amount;
+    }
+  }
+  const goesNegative =
+    (txType === "Keluar" || txType === "Transfer") &&
+    effectiveBalance !== undefined &&
+    numericAmount > 0 &&
+    numericAmount > effectiveBalance;
+  const sourceAccountName = accounts.find((a) => a.id === accountId)?.name ?? "akun ini";
+
+  // Check if the batch of AI drafts would pull any account balance below zero.
+  const aiNegativeAccounts: Array<{ name: string; projected: number }> = [];
+  if (balances && aiDrafts.length > 0) {
+    const projected: Record<string, number> = { ...balances };
+    for (const draft of aiDrafts) {
+      if (draft.type === "Masuk") {
+        projected[draft.accountId] = (projected[draft.accountId] ?? 0) + draft.amount;
+      } else if (draft.type === "Keluar") {
+        projected[draft.accountId] = (projected[draft.accountId] ?? 0) - draft.amount;
+      } else if (draft.type === "Transfer") {
+        projected[draft.accountId] = (projected[draft.accountId] ?? 0) - draft.amount;
+        if (draft.toAccountId) {
+          projected[draft.toAccountId] = (projected[draft.toAccountId] ?? 0) + draft.amount;
+        }
+      }
+    }
+    for (const acc of accounts) {
+      const nextBal = projected[acc.id];
+      if (nextBal !== undefined && nextBal < 0 && nextBal < (balances[acc.id] ?? 0)) {
+        aiNegativeAccounts.push({ name: acc.name, projected: nextBal });
+      }
+    }
+  }
 
   const handleQuickAdd = (delta: number) => {
     setAmountRaw(String(numericAmount + delta));
@@ -234,7 +281,7 @@ export function TransactionSheet({
           mimeType: opts?.mimeType,
         }),
       });
-      const data = (await res.json()) as {
+      const data = (await res.json().catch(() => ({}))) as {
         drafts?: ParsedTransactionDraft[];
         engine?: string;
         error?: string;
@@ -305,6 +352,9 @@ export function TransactionSheet({
       if (base64) {
         void runAiParse({ imageBase64: base64, mimeType: file.type || "image/jpeg" });
       }
+    };
+    reader.onerror = () => {
+      setAiError("Gagal membaca file gambar struk.");
     };
     reader.readAsDataURL(file);
     e.target.value = "";
@@ -515,13 +565,16 @@ export function TransactionSheet({
                         <button
                           type="button"
                           onClick={async () => {
-                            if (!newCatName.trim()) return;
-                            await onAddCategory(
-                              newCatName.trim(),
-                              txType === "Masuk" ? "Masuk" : "Keluar",
-                            );
-                            setCategory(newCatName.trim());
-                            setNewCatName("");
+                            const name = newCatName.trim();
+                            if (!name) return;
+                            try {
+                              await onAddCategory(name, txType === "Masuk" ? "Masuk" : "Keluar");
+                              setCategory(name);
+                              setNewCatName("");
+                              setFormError(null);
+                            } catch (err) {
+                              setFormError(err instanceof Error ? err.message : "Gagal menambah kategori.");
+                            }
                           }}
                           className="rounded-xl bg-[var(--brand-primary)] px-3.5 text-xs font-bold text-white"
                         >
@@ -562,7 +615,13 @@ export function TransactionSheet({
                             <button
                               type="button"
                               aria-label={`Hapus kategori ${cat.name}`}
-                              onClick={() => onDeleteCategory(cat.id)}
+                              onClick={async () => {
+                                try {
+                                  await onDeleteCategory(cat.id);
+                                } catch (err) {
+                                  setFormError(err instanceof Error ? err.message : "Gagal menghapus kategori.");
+                                }
+                              }}
                               className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full bg-[#BE123C] text-xs font-bold text-white shadow-xs"
                             >
                               ×
@@ -688,6 +747,17 @@ export function TransactionSheet({
                   className="min-h-[44px] w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3.5 text-sm text-[var(--text-primary)]"
                 />
               </div>
+
+              {goesNegative && effectiveBalance !== undefined && (
+                <p
+                  role="status"
+                  className="rounded-xl bg-[#FEF3C7] px-3 py-2 text-xs font-semibold text-[#92400E] dark:bg-[#451A03] dark:text-[#FDE68A]"
+                >
+                  Saldo {sourceAccountName} tercatat {formatRupiah(effectiveBalance)}. Setelah transaksi ini jadi{" "}
+                  {formatRupiah(effectiveBalance - numericAmount)}. Kalau saldo awal akun belum diisi, atur di Sheets &
+                  Atur atau Koreksi Saldo.
+                </p>
+              )}
 
               {formError && (
                 <p role="alert" className="rounded-xl bg-[var(--expense-bg)] px-3 py-2 text-xs font-bold text-[var(--expense-text)]">
@@ -868,6 +938,17 @@ export function TransactionSheet({
                       </div>
                     );
                   })}
+
+                  {aiNegativeAccounts.length > 0 && (
+                    <p
+                      role="status"
+                      className="rounded-xl bg-[#FEF3C7] px-3 py-2 text-xs font-semibold text-[#92400E] dark:bg-[#451A03] dark:text-[#FDE68A]"
+                    >
+                      Saldo setelah disimpan akan minus:{" "}
+                      {aiNegativeAccounts.map((a) => `${a.name} (${formatRupiah(a.projected)})`).join(", ")}.
+                      Pastikan saldo awal akun sudah diisi di Sheets & Atur.
+                    </p>
+                  )}
 
                   <button
                     type="button"

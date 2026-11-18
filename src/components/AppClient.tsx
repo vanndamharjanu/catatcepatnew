@@ -74,6 +74,11 @@ export function AppClient({ initialDb }: AppClientProps) {
   const [depositModalGoalId, setDepositModalGoalId] = useState<string | null>(null);
   const [depositRaw, setDepositRaw] = useState("");
   const [depositAccountId, setDepositAccountId] = useState(initialDb.accounts[0]?.id || "acc-cash");
+  const [modalError, setModalError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setModalError(null);
+  }, [goalModalOpen, depositModalGoalId]);
 
   // Riwayat filters (YYYY-MM | "all" | "custom")
   const todayMonth = toIsoDate().slice(0, 7);
@@ -167,6 +172,11 @@ export function AppClient({ initialDb }: AppClientProps) {
     () => computeAccountBalances(db.accounts, db.transactions),
     [db.accounts, db.transactions],
   );
+  const accountBalanceMap = useMemo(
+    () => Object.fromEntries(accountBalances.map((acc) => [acc.id, acc.balance])),
+    [accountBalances],
+  );
+  const hasNegativeBalance = accountBalances.some((acc) => acc.balance < 0);
 
   // Mood and helpful message for Guri mascot
   const guriState = useMemo((): { mood: GuriMood; message: string } => {
@@ -272,24 +282,41 @@ export function AppClient({ initialDb }: AppClientProps) {
     setReconcileOpen(true);
   };
 
+  /** Call a state-mutating API; throws with the server's message (or a fallback) on any failure. */
+  const callApi = async (url: string, init: RequestInit, fallback: string): Promise<AppDatabase> => {
+    let res: Response;
+    try {
+      res = await fetch(url, init);
+    } catch {
+      throw new Error("Tidak bisa terhubung ke server. Periksa koneksi lalu coba lagi.");
+    }
+    const data = (await res.json().catch(() => ({}))) as AppDatabase & { error?: string };
+    if (!res.ok) throw new Error(data.error || fallback);
+    return data;
+  };
+  const errMsg = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
+
   const handleSubmitReconcile = async (payload: {
     accountId: string;
     actualBalance: number;
     note: string;
   }) => {
-    const res = await fetch("/api/transactions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "reconcile",
-        accountId: payload.accountId,
-        actualBalance: payload.actualBalance,
-        note: payload.note,
-      }),
-    });
-    const data = (await res.json()) as AppDatabase & { error?: string };
-    if (!res.ok) throw new Error(data.error || "Gagal menyimpan koreksi saldo.");
-    setDb(data);
+    setDb(
+      await callApi(
+        "/api/transactions",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "reconcile",
+            accountId: payload.accountId,
+            actualBalance: payload.actualBalance,
+            note: payload.note,
+          }),
+        },
+        "Gagal menyimpan koreksi saldo.",
+      ),
+    );
     showToast("Saldo berhasil dikoreksi.");
   };
 
@@ -303,89 +330,111 @@ export function AppClient({ initialDb }: AppClientProps) {
     amount: number;
     note: string;
   }) => {
-    const method = payload.id ? "PATCH" : "POST";
-    const res = await fetch("/api/transactions", {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const data = (await res.json()) as AppDatabase & { error?: string };
-    if (!res.ok) throw new Error(data.error || "Gagal menyimpan transaksi.");
-    setDb(data);
+    setDb(
+      await callApi(
+        "/api/transactions",
+        {
+          method: payload.id ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+        "Gagal menyimpan transaksi.",
+      ),
+    );
     showToast(payload.id ? "Transaksi diperbarui." : "Transaksi disimpan.");
   };
 
   const handleSaveBatch = async (drafts: ParsedTransactionDraft[]) => {
-    const res = await fetch("/api/transactions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        items: drafts.map((d) => ({
-          date: d.date,
-          type: d.type,
-          category: d.category,
-          accountId: d.accountId,
-          toAccountId: d.toAccountId,
-          amount: d.amount,
-          note: d.note,
-          source: "ai_text",
-        })),
-      }),
-    });
-    const data = (await res.json()) as AppDatabase & { error?: string };
-    if (!res.ok) throw new Error(data.error || "Gagal menyimpan daftar transaksi.");
-    setDb(data);
+    setDb(
+      await callApi(
+        "/api/transactions",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            items: drafts.map((d) => ({
+              date: d.date,
+              type: d.type,
+              category: d.category,
+              accountId: d.accountId,
+              toAccountId: d.toAccountId,
+              amount: d.amount,
+              note: d.note,
+              source: "ai_text",
+            })),
+          }),
+        },
+        "Gagal menyimpan daftar transaksi.",
+      ),
+    );
     showToast(`${drafts.length} transaksi dari AI berhasil dicatat.`);
   };
 
   const handleDeleteTx = async (id: string) => {
     setBusyAction(true);
     try {
-      const res = await fetch(`/api/transactions?id=${encodeURIComponent(id)}`, {
-        method: "DELETE",
-      });
-      const data = (await res.json()) as AppDatabase & { error?: string };
-      if (!res.ok) throw new Error(data.error || "Gagal menghapus transaksi.");
-      setDb(data);
+      setDb(
+        await callApi(
+          `/api/transactions?id=${encodeURIComponent(id)}`,
+          { method: "DELETE" },
+          "Gagal menghapus transaksi.",
+        ),
+      );
       setConfirmDeleteTxId(null);
       showToast("Transaksi dihapus.");
     } catch (err) {
-      setGlobalError(err instanceof Error ? err.message : "Gagal menghapus transaksi.");
+      setGlobalError(errMsg(err, "Gagal menghapus transaksi."));
     } finally {
       setBusyAction(false);
     }
   };
 
+  // Called from TransactionSheet, which shows the thrown error inside the sheet.
   const handleAddCategory = async (name: string, type: "Masuk" | "Keluar") => {
-    const res = await fetch("/api/state", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "add_category", categoryName: name, categoryType: type }),
-    });
-    if (res.ok) setDb((await res.json()) as AppDatabase);
+    setDb(
+      await callApi(
+        "/api/state",
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "add_category", categoryName: name, categoryType: type }),
+        },
+        "Gagal menambah kategori.",
+      ),
+    );
   };
 
   const handleDeleteCategory = async (categoryId: string) => {
-    const res = await fetch("/api/state", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "delete_category", categoryId }),
-    });
-    if (res.ok) setDb((await res.json()) as AppDatabase);
+    setDb(
+      await callApi(
+        "/api/state",
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "delete_category", categoryId }),
+        },
+        "Gagal menghapus kategori.",
+      ),
+    );
   };
 
   const handleLoadSimulation = async () => {
     setBusyAction(true);
     try {
-      const res = await fetch("/api/state", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "load_simulation" }),
-      });
-      if (res.ok) {
-        setDb((await res.json()) as AppDatabase);
-        showToast("Data simulasi contoh dimuat.");
-      }
+      setDb(
+        await callApi(
+          "/api/state",
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "load_simulation" }),
+          },
+          "Gagal memuat data simulasi.",
+        ),
+      );
+      showToast("Data simulasi contoh dimuat.");
+    } catch (err) {
+      setGlobalError(errMsg(err, "Gagal memuat data simulasi."));
     } finally {
       setBusyAction(false);
     }
@@ -394,25 +443,30 @@ export function AppClient({ initialDb }: AppClientProps) {
   const handleCreateGoal = async (e: React.FormEvent) => {
     e.preventDefault();
     const targetAmount = parseInt(goalTargetRaw.replace(/\D/g, ""), 10) || 0;
-    if (!goalName.trim() || targetAmount <= 0) return;
+    if (!goalName.trim() || targetAmount <= 0) {
+      setModalError("Isi nama target dan nominal lebih dari Rp 0.");
+      return;
+    }
     setBusyAction(true);
+    setModalError(null);
     try {
-      const res = await fetch("/api/goals", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "create_goal",
-          name: goalName.trim(),
-          targetAmount,
-        }),
-      });
-      if (res.ok) {
-        setDb((await res.json()) as AppDatabase);
-        setGoalModalOpen(false);
-        setGoalName("");
-        setGoalTargetRaw("");
-        showToast("Target tabungan dibuat.");
-      }
+      setDb(
+        await callApi(
+          "/api/goals",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "create_goal", name: goalName.trim(), targetAmount }),
+          },
+          "Gagal membuat target tabungan.",
+        ),
+      );
+      setGoalModalOpen(false);
+      setGoalName("");
+      setGoalTargetRaw("");
+      showToast("Target tabungan dibuat.");
+    } catch (err) {
+      setModalError(errMsg(err, "Gagal membuat target tabungan."));
     } finally {
       setBusyAction(false);
     }
@@ -421,25 +475,34 @@ export function AppClient({ initialDb }: AppClientProps) {
   const handleDepositGoal = async (e: React.FormEvent) => {
     e.preventDefault();
     const amount = parseInt(depositRaw.replace(/\D/g, ""), 10) || 0;
-    if (!depositModalGoalId || amount <= 0) return;
+    if (!depositModalGoalId || amount <= 0) {
+      setModalError("Masukkan nominal setoran lebih dari Rp 0.");
+      return;
+    }
     setBusyAction(true);
+    setModalError(null);
     try {
-      const res = await fetch("/api/goals", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "deposit_goal",
-          goalId: depositModalGoalId,
-          amount,
-          accountId: depositAccountId,
-        }),
-      });
-      if (res.ok) {
-        setDb((await res.json()) as AppDatabase);
-        setDepositModalGoalId(null);
-        setDepositRaw("");
-        showToast("Setoran tabungan berhasil dicatat.");
-      }
+      setDb(
+        await callApi(
+          "/api/goals",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "deposit_goal",
+              goalId: depositModalGoalId,
+              amount,
+              accountId: depositAccountId,
+            }),
+          },
+          "Gagal mencatat setoran.",
+        ),
+      );
+      setDepositModalGoalId(null);
+      setDepositRaw("");
+      showToast("Setoran tabungan berhasil dicatat.");
+    } catch (err) {
+      setModalError(errMsg(err, "Gagal mencatat setoran."));
     } finally {
       setBusyAction(false);
     }
@@ -454,12 +517,20 @@ export function AppClient({ initialDb }: AppClientProps) {
     ) {
       return;
     }
-    const res = await fetch(`/api/goals?id=${encodeURIComponent(id)}`, { method: "DELETE" });
-    if (res.ok) {
-      setDb((await res.json()) as AppDatabase);
+    setBusyAction(true);
+    try {
+      setDb(
+        await callApi(
+          `/api/goals?id=${encodeURIComponent(id)}`,
+          { method: "DELETE" },
+          "Gagal menghapus target tabungan.",
+        ),
+      );
       showToast("Target tabungan dihapus.");
-    } else {
-      setGlobalError("Gagal menghapus target tabungan.");
+    } catch (err) {
+      setGlobalError(errMsg(err, "Gagal menghapus target tabungan."));
+    } finally {
+      setBusyAction(false);
     }
   };
 
@@ -499,8 +570,10 @@ export function AppClient({ initialDb }: AppClientProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode: "ask", question: q }),
       });
-      const data = (await res.json()) as { answer?: string };
-      setAskAnswer(data.answer || "Belum bisa memproses pertanyaan.");
+      const data = (await res.json().catch(() => ({}))) as { answer?: string; error?: string };
+      setAskAnswer(data.answer || data.error || "Belum bisa memproses pertanyaan. Coba lagi.");
+    } catch {
+      setAskAnswer("Tidak bisa terhubung ke server. Periksa koneksi lalu coba lagi.");
     } finally {
       setAskLoading(false);
     }
@@ -851,12 +924,40 @@ export function AppClient({ initialDb }: AppClientProps) {
                         <span className="text-xs font-bold text-[var(--text-primary)]">
                           {acc.name}
                         </span>
-                        <span className="text-xs font-extrabold text-[var(--text-primary)] tabular-nums">
+                        <span
+                          className={`text-xs font-extrabold tabular-nums ${
+                            acc.balance < 0
+                              ? "text-[var(--expense-text)]"
+                              : "text-[var(--text-primary)]"
+                          }`}
+                        >
                           {displayMoney(acc.balance)}
                         </span>
                       </div>
                     ))}
                   </div>
+
+                  {hasNegativeBalance && (
+                    <p className="mt-2.5 rounded-xl bg-[#FEF3C7] px-3 py-2 text-[11px] font-semibold text-[#92400E] dark:bg-[#451A03] dark:text-[#FDE68A]">
+                      Ada saldo minus karena pengeluaran lebih besar dari saldo tercatat. Kamu bisa atur saldo awal di{" "}
+                      <button
+                        type="button"
+                        onClick={() => setSheetsOpen(true)}
+                        className="font-extrabold underline"
+                      >
+                        Sheets & Atur
+                      </button>{" "}
+                      atau samakan lewat tombol{" "}
+                      <button
+                        type="button"
+                        onClick={() => openReconcile(accountBalances.find((a) => a.balance < 0)?.id)}
+                        className="font-extrabold underline"
+                      >
+                        Koreksi
+                      </button>
+                      .
+                    </p>
+                  )}
                 </section>
               </div>
 
@@ -1273,8 +1374,9 @@ export function AppClient({ initialDb }: AppClientProps) {
                           </button>
                           <button
                             type="button"
+                            disabled={busyAction}
                             onClick={() => handleDeleteGoal(goal.id)}
-                            className="min-h-[38px] rounded-xl px-2.5 text-xs font-bold text-[var(--expense-text)] hover:bg-[var(--expense-bg)]"
+                            className="min-h-[38px] rounded-xl px-2.5 text-xs font-bold text-[var(--expense-text)] hover:bg-[var(--expense-bg)] disabled:opacity-50"
                           >
                             Hapus
                           </button>
@@ -1576,6 +1678,7 @@ export function AppClient({ initialDb }: AppClientProps) {
         initialAccountId={txSheetInitialAccountId}
         editingTx={editingTx}
         accounts={db.accounts}
+        balances={accountBalanceMap}
         categories={db.categories}
         onClose={() => {
           setTxSheetOpen(false);
@@ -1726,6 +1829,12 @@ export function AppClient({ initialDb }: AppClientProps) {
               />
             </div>
 
+            {modalError && (
+              <p role="alert" className="rounded-xl bg-[var(--expense-bg)] px-3 py-2 text-xs font-bold text-[var(--expense-text)]">
+                {modalError}
+              </p>
+            )}
+
             <button
               type="submit"
               disabled={busyAction}
@@ -1816,11 +1925,28 @@ export function AppClient({ initialDb }: AppClientProps) {
               >
                 {db.accounts.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.name}
+                    {a.name} ({displayMoney(accountBalanceMap[a.id] ?? 0)})
                   </option>
                 ))}
               </select>
             </div>
+
+            {(parseInt(depositRaw.replace(/\D/g, ""), 10) || 0) >
+              (accountBalanceMap[depositAccountId] ?? 0) && (
+              <p
+                role="status"
+                className="rounded-xl bg-[#FEF3C7] px-3 py-2 text-xs font-semibold text-[#92400E] dark:bg-[#451A03] dark:text-[#FDE68A]"
+              >
+                Saldo {db.accounts.find((a) => a.id === depositAccountId)?.name ?? "akun ini"} tercatat{" "}
+                {displayMoney(accountBalanceMap[depositAccountId] ?? 0)}. Setelah setor ini saldonya menjadi minus.
+              </p>
+            )}
+
+            {modalError && (
+              <p role="alert" className="rounded-xl bg-[var(--expense-bg)] px-3 py-2 text-xs font-bold text-[var(--expense-text)]">
+                {modalError}
+              </p>
+            )}
 
             <button
               type="submit"

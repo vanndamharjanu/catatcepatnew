@@ -24,6 +24,7 @@ export function SheetsDrawer({
   const [preset, setPreset] = useState<WorkspaceSettings["categoryPreset"]>(
     db.settings.categoryPreset,
   );
+  const [initialBalances, setInitialBalances] = useState<Record<string, string>>({});
   const [csvText, setCsvText] = useState("");
   const [previewRows, setPreviewRows] = useState<string[][] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -35,9 +36,12 @@ export function SheetsDrawer({
     setBudgetText(String(db.settings.monthlyBudget));
     setPaydayDay(String(db.settings.paydayDay));
     setPreset(db.settings.categoryPreset);
+    setInitialBalances(
+      Object.fromEntries(db.accounts.map((acc) => [acc.id, String(acc.initialBalance || 0)])),
+    );
     setErrorMsg(null);
     setConfirmClear(false);
-  }, [open, db.settings]);
+  }, [open, db.settings, db.accounts]);
 
   useEffect(() => {
     if (!open) return;
@@ -57,6 +61,12 @@ export function SheetsDrawer({
     try {
       const budget = parseInt(budgetText.replace(/\D/g, ""), 10) || 0;
       const day = Math.min(28, Math.max(1, parseInt(paydayDay, 10) || 1));
+      const numericInitialBalances = Object.fromEntries(
+        db.accounts.map((acc) => [
+          acc.id,
+          parseInt((initialBalances[acc.id] ?? "0").replace(/\D/g, ""), 10) || 0,
+        ]),
+      );
       const res = await fetch("/api/state", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -64,12 +74,13 @@ export function SheetsDrawer({
           monthlyBudget: budget,
           paydayDay: day,
           categoryPreset: preset,
+          initialBalances: numericInitialBalances,
         }),
       });
-      const data = (await res.json()) as AppDatabase & { error?: string };
+      const data = (await res.json().catch(() => ({}))) as AppDatabase & { error?: string };
       if (!res.ok) throw new Error(data.error || "Gagal menyimpan pengaturan.");
       onStateUpdated(data);
-      onNotify("Pengaturan anggaran dan preset diperbarui.");
+      onNotify("Pengaturan anggaran, saldo awal, dan preset diperbarui.");
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Gagal menyimpan.");
     } finally {
@@ -82,7 +93,11 @@ export function SheetsDrawer({
     setErrorMsg(null);
     try {
       const res = await fetch("/api/sheets/connect");
-      const data = (await res.json()) as { configured?: boolean; url?: string; error?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        configured?: boolean;
+        url?: string;
+        error?: string;
+      };
       if (!res.ok || !data.url) {
         setErrorMsg(data.error || "Google OAuth belum dikonfigurasi.");
         return;
@@ -100,7 +115,7 @@ export function SheetsDrawer({
     setErrorMsg(null);
     try {
       const res = await fetch("/api/sheets/sync", { method: "POST" });
-      const data = (await res.json()) as {
+      const data = (await res.json().catch(() => ({}))) as {
         mode?: "preview" | "live";
         previewRows?: string[][];
         syncedCount?: number;
@@ -123,12 +138,16 @@ export function SheetsDrawer({
 
   const handleDisconnectSheets = async () => {
     setBusy(true);
+    setErrorMsg(null);
     try {
       const res = await fetch("/api/sheets/sync", { method: "DELETE" });
-      const data = (await res.json()) as AppDatabase;
+      const data = (await res.json().catch(() => ({}))) as AppDatabase & { error?: string };
+      if (!res.ok) throw new Error(data.error || "Gagal memutus koneksi Google Sheets.");
       onStateUpdated(data);
       setPreviewRows(null);
       onNotify("Koneksi Google Sheets diputus.");
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Gagal memutus koneksi Google Sheets.");
     } finally {
       setBusy(false);
     }
@@ -147,7 +166,7 @@ export function SheetsDrawer({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ csvText }),
       });
-      const data = (await res.json()) as {
+      const data = (await res.json().catch(() => ({}))) as {
         importedCount?: number;
         state?: AppDatabase;
         error?: string;
@@ -165,16 +184,20 @@ export function SheetsDrawer({
 
   const handleClearAll = async () => {
     setBusy(true);
+    setErrorMsg(null);
     try {
       const res = await fetch("/api/state", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "clear_all_data" }),
       });
-      const next = (await res.json()) as AppDatabase;
+      const next = (await res.json().catch(() => ({}))) as AppDatabase & { error?: string };
+      if (!res.ok) throw new Error(next.error || "Gagal menghapus semua data.");
       onStateUpdated(next);
       setConfirmClear(false);
       onNotify("Semua transaksi dan target dibersihkan.");
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Gagal menghapus semua data.");
     } finally {
       setBusy(false);
     }
@@ -378,6 +401,41 @@ export function SheetsDrawer({
                 <option value="mahasiswa">Mahasiswa (Uang Saku, Kost)</option>
                 <option value="freelancer">Freelancer (Proyek, Retainer)</option>
               </select>
+            </div>
+
+            <div>
+              <span className="mb-1.5 block text-xs font-bold text-[var(--text-muted)]">
+                Saldo Awal Akun (Rp)
+              </span>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {db.accounts.map((acc) => {
+                  const raw = initialBalances[acc.id] ?? String(acc.initialBalance || 0);
+                  const numeric = parseInt(raw.replace(/\D/g, ""), 10) || 0;
+                  return (
+                    <div key={acc.id}>
+                      <label
+                        htmlFor={`init-bal-${acc.id}`}
+                        className="mb-1 block text-[11px] font-semibold text-[var(--text-muted)]"
+                      >
+                        {acc.name}
+                      </label>
+                      <input
+                        id={`init-bal-${acc.id}`}
+                        type="text"
+                        inputMode="numeric"
+                        value={numeric.toLocaleString("id-ID")}
+                        onChange={(e) =>
+                          setInitialBalances((prev) => ({
+                            ...prev,
+                            [acc.id]: e.target.value.replace(/\D/g, ""),
+                          }))
+                        }
+                        className="min-h-[40px] w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2.5 text-xs font-bold text-[var(--text-primary)] tabular-nums"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             <button

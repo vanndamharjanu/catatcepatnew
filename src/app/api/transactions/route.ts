@@ -177,6 +177,7 @@ export async function PATCH(request: Request) {
     db.transactions[idx] = {
       ...db.transactions[idx],
       ...valid,
+      source: db.transactions[idx].source,
       sheetSyncStatus: db.sheetConnection.connected ? "pending" : "local_only",
       updatedAt: new Date().toISOString(),
     };

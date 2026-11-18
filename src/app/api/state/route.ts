@@ -26,6 +26,7 @@ export async function PATCH(request: Request) {
       categoryType?: "Masuk" | "Keluar";
       categoryId?: string;
       plan?: "free" | "pro";
+      initialBalances?: Record<string, number>;
     };
 
     const db = readDb();
@@ -86,6 +87,19 @@ export async function PATCH(request: Request) {
     if (body.categoryPreset) {
       db.settings.categoryPreset = body.categoryPreset;
       db.categories = buildPresetCategoryList(body.categoryPreset);
+    }
+    if (body.initialBalances && typeof body.initialBalances === "object") {
+      for (const acc of db.accounts) {
+        if (!(acc.id in body.initialBalances)) continue;
+        const raw = Number(body.initialBalances[acc.id]);
+        if (!Number.isFinite(raw) || raw < 0) {
+          return NextResponse.json(
+            { error: `Saldo awal ${acc.name} harus Rp 0 atau lebih.` },
+            { status: 400 },
+          );
+        }
+        acc.initialBalance = Math.round(raw);
+      }
     }
 
     writeDb(db);

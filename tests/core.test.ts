@@ -196,7 +196,14 @@ function runTests() {
   recomputeGoalAmounts(goalDb);
   assert.equal(goalDb.goals[0].currentAmount, 100_000);
 
-  console.log("ALL CORE TESTS PASSED (8/8)");
+  // 9. Account initialBalance prevents negative balance from opening expenses
+  const seededAccounts: Account[] = sampleAccounts.map((a) =>
+    a.id === "acc-cash" ? { ...a, initialBalance: 1_500_000 } : a,
+  );
+  const seededBalances = computeAccountBalances(seededAccounts, txs);
+  assert.equal(seededBalances.find((b) => b.id === "acc-cash")?.balance, 481_000);
+
+  console.log("ALL CORE TESTS PASSED (9/9)");
 }
 
 runTests();
