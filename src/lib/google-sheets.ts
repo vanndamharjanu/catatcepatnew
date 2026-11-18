@@ -185,7 +185,17 @@ export async function createCatatCepatSpreadsheet(accessToken: string): Promise<
 
   if (!createRes.ok) {
     const text = await createRes.text();
-    throw new Error(`Gagal membuat spreadsheet: ${text}`);
+    if (/has not been used in project|SERVICE_DISABLED/i.test(text)) {
+      throw new Error(
+        "Google Sheets API atau Google Drive API belum diaktifkan (Enable) di Google Cloud Console project Anda.",
+      );
+    }
+    if (/insufficient/i.test(text) || createRes.status === 403) {
+      throw new Error(
+        "Izin akses Google Drive / Sheets ditolak. Pastikan kotak izin drive.file dicentang saat persetujuan Google.",
+      );
+    }
+    throw new Error(`Gagal membuat spreadsheet: ${text.slice(0, 180)}`);
   }
 
   const created = (await createRes.json()) as {

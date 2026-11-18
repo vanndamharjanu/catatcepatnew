@@ -19,6 +19,13 @@ export async function GET(request: Request) {
   }
 
   try {
+    const grantedScope = searchParams.get("scope") || "";
+    if (grantedScope && !grantedScope.includes("drive.file")) {
+      throw new Error(
+        "Izin Google Drive (drive.file) belum dicentang di layar persetujuan Google. Silakan ulangi dan centang kotak izin file Google Drive sebelum klik Lanjutkan.",
+      );
+    }
+
     const { accessToken, refreshToken } = await exchangeCodeForTokens(code);
     const email = await fetchGoogleUserEmail(accessToken);
     const sheet = await createCatatCepatSpreadsheet(accessToken);

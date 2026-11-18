@@ -177,7 +177,10 @@ export function AppClient({ initialDb }: AppClientProps) {
       showToast("Google Sheets berhasil dihubungkan dan disinkronkan.");
       window.history.replaceState({}, "", "/");
     } else if (sheetsParam === "error") {
-      setGlobalError("Gagal menghubungkan Google Sheets. Periksa kredensial OAuth di .env.local.");
+      setGlobalError(
+        db.sheetConnection.lastError ||
+          "Gagal menghubungkan Google Sheets. Periksa izin Drive dan kredensial OAuth di .env.local.",
+      );
       window.history.replaceState({}, "", "/");
     }
 
