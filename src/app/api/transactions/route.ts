@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { computeAccountBalances, formatRupiah, toIsoDate } from "@/lib/finance";
-import { readDb, toPublicState, writeDb } from "@/lib/store";
+import { readAsyncDb, toPublicState, writeAsyncDb } from "@/lib/store";
 import type { Account, Transaction, TransactionSource, TransactionType } from "@/lib/types";
 
 interface TransactionInput {
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
       items?: TransactionInput[];
     } & TransactionInput;
 
-    const db = readDb();
+    const db = await readAsyncDb();
     const nowIso = new Date().toISOString();
 
     if (body.action === "reconcile") {
@@ -102,7 +102,7 @@ export async function POST(request: Request) {
       };
 
       db.transactions.unshift(reconciliationTx);
-      writeDb(db);
+      await writeAsyncDb(db);
       return NextResponse.json(toPublicState(db), { status: 201 });
     }
 
@@ -129,7 +129,7 @@ export async function POST(request: Request) {
     }
 
     db.transactions = [...created, ...db.transactions];
-    writeDb(db);
+    await writeAsyncDb(db);
 
     return NextResponse.json(toPublicState(db), { status: 201 });
   } catch (err) {
@@ -147,7 +147,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "ID transaksi wajib disertakan." }, { status: 400 });
     }
 
-    const db = readDb();
+    const db = await readAsyncDb();
     const idx = db.transactions.findIndex((t) => t.id === body.id);
     if (idx === -1) {
       return NextResponse.json({ error: "Transaksi tidak ditemukan." }, { status: 404 });
@@ -166,7 +166,7 @@ export async function PATCH(request: Request) {
       updatedAt: new Date().toISOString(),
     };
 
-    writeDb(db);
+    await writeAsyncDb(db);
     return NextResponse.json(toPublicState(db));
   } catch (err) {
     return NextResponse.json(
@@ -184,7 +184,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "Parameter id wajib diisi." }, { status: 400 });
     }
 
-    const db = readDb();
+    const db = await readAsyncDb();
     const before = db.transactions.length;
     db.transactions = db.transactions.filter((t) => t.id !== id);
     if (db.transactions.length === before) {
@@ -197,7 +197,7 @@ export async function DELETE(request: Request) {
       );
     }
 
-    writeDb(db);
+    await writeAsyncDb(db);
     return NextResponse.json(toPublicState(db));
   } catch (err) {
     return NextResponse.json(

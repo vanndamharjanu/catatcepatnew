@@ -108,6 +108,14 @@ export interface WorkspaceSettings {
   categoryPreset: "umum" | "asn_karyawan" | "mahasiswa" | "freelancer";
 }
 
+export interface AuthStatus {
+  configured: boolean;
+  authenticated: boolean;
+  mode: "local" | "supabase";
+  email?: string;
+  userId?: string;
+}
+
 export interface AppDatabase {
   settings: WorkspaceSettings;
   accounts: Account[];
@@ -115,6 +123,7 @@ export interface AppDatabase {
   goals: SavingGoal[];
   transactions: Transaction[];
   sheetConnection: SheetConnection;
+  auth?: AuthStatus;
 }
 
 export interface ParsedTransactionDraft {

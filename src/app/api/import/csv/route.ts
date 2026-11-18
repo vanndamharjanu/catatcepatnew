@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { parseLegacyCsv, readDb, toPublicState, writeDb } from "@/lib/store";
+import { parseLegacyCsv, readAsyncDb, toPublicState, writeAsyncDb } from "@/lib/store";
 
 export async function POST(request: Request) {
   try {
@@ -8,7 +8,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Isi CSV tidak boleh kosong." }, { status: 400 });
     }
 
-    const db = readDb();
+    const db = await readAsyncDb();
     const targetAccountId = body.accountId || db.accounts[0]?.id || "acc-cash";
     const imported = parseLegacyCsv(body.csvText, targetAccountId);
 
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     }
 
     db.transactions = [...imported, ...db.transactions];
-    writeDb(db);
+    await writeAsyncDb(db);
     return NextResponse.json({
       importedCount: imported.length,
       state: toPublicState(db),

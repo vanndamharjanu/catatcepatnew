@@ -1,0 +1,154 @@
+import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
+import {
+  createInitialDb,
+  readAsyncDb,
+  readDb,
+  recomputeGoalAmounts,
+  toPublicState,
+  writeAsyncDb,
+} from "@/lib/store";
+import {
+  CC_ACCESS_COOKIE,
+  CC_REFRESH_COOKIE,
+  isSupabaseConfigured,
+  readSupabaseWorkspace,
+  signInWithSupabasePassword,
+  signUpWithSupabasePassword,
+  writeSupabaseWorkspaceDelta,
+} from "@/lib/supabase";
+
+export async function POST(request: Request) {
+  try {
+    const body = (await request.json().catch(() => ({}))) as {
+      action?: "login" | "register" | "logout" | "migrate_local";
+      email?: string;
+      password?: string;
+      migrateLocal?: boolean;
+    };
+
+    const cookieStore = await cookies();
+
+    if (body.action === "logout") {
+      cookieStore.delete(CC_ACCESS_COOKIE);
+      cookieStore.delete(CC_REFRESH_COOKIE);
+      return NextResponse.json({ state: toPublicState(readDb()) });
+    }
+
+    if (!isSupabaseConfigured()) {
+      return NextResponse.json(
+        {
+          error:
+            "Supabase belum dikonfigurasi. Isi NEXT_PUBLIC_SUPABASE_URL dan NEXT_PUBLIC_SUPABASE_ANON_KEY di .env.local.",
+        },
+        { status: 400 },
+      );
+    }
+
+    if (body.action === "migrate_local") {
+      const cloudDb = await readAsyncDb();
+      if (!cloudDb.auth?.authenticated) {
+        return NextResponse.json({ error: "Silakan masuk ke akun Cloud terlebih dahulu." }, { status: 401 });
+      }
+      const localDb = readDb();
+      const existingTxIds = new Set(cloudDb.transactions.map((t) => t.id));
+      const newTxs = localDb.transactions.filter((t) => !existingTxIds.has(t.id));
+      const existingGoalIds = new Set(cloudDb.goals.map((g) => g.id));
+      const newGoals = localDb.goals.filter((g) => !existingGoalIds.has(g.id));
+
+      cloudDb.goals = [...cloudDb.goals, ...newGoals];
+      cloudDb.transactions = [...newTxs, ...cloudDb.transactions];
+      await writeAsyncDb(cloudDb);
+      return NextResponse.json({
+        migratedCount: newTxs.length,
+        state: toPublicState(cloudDb),
+      });
+    }
+
+    const email = (body.email || "").trim();
+    const password = body.password || "";
+    if (!email || !password) {
+      return NextResponse.json({ error: "Email dan password wajib diisi." }, { status: 400 });
+    }
+    if (password.length < 6) {
+      return NextResponse.json({ error: "Password minimal 6 karakter." }, { status: 400 });
+    }
+
+    if (body.action === "register") {
+      const result = await signUpWithSupabasePassword(email, password);
+      if (result.error) {
+        return NextResponse.json({ error: result.error }, { status: 400 });
+      }
+      if (result.needsEmailConfirmation || !result.session) {
+        return NextResponse.json({
+          needsEmailConfirmation: true,
+          message:
+            "Pendaftaran berhasil! Cek kotak masuk email Anda untuk verifikasi, atau matikan 'Confirm email' di Supabase Dashboard > Authentication > Providers > Email agar bisa langsung login.",
+        });
+      }
+
+      cookieStore.set(CC_ACCESS_COOKIE, result.session.accessToken, {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 7,
+      });
+      cookieStore.set(CC_REFRESH_COOKIE, result.session.refreshToken, {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 30,
+      });
+
+      const seed = body.migrateLocal ? readDb() : createInitialDb();
+      const { workspaceId, db } = await readSupabaseWorkspace(result.session, seed);
+      if (body.migrateLocal && (seed.transactions.length > 0 || seed.goals.length > 0)) {
+        const baseline = structuredClone(db);
+        db.goals = seed.goals;
+        db.transactions = seed.transactions;
+        recomputeGoalAmounts(db);
+        await writeSupabaseWorkspaceDelta(result.session, workspaceId, baseline, db);
+      }
+      return NextResponse.json({ state: toPublicState(db) });
+    }
+
+    // Default: login
+    const result = await signInWithSupabasePassword(email, password);
+    if (result.error || !result.session) {
+      return NextResponse.json({ error: result.error || "Gagal masuk." }, { status: 401 });
+    }
+
+    cookieStore.set(CC_ACCESS_COOKIE, result.session.accessToken, {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7,
+    });
+    cookieStore.set(CC_REFRESH_COOKIE, result.session.refreshToken, {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30,
+    });
+
+    const { workspaceId, db } = await readSupabaseWorkspace(result.session, createInitialDb());
+    if (body.migrateLocal) {
+      const localDb = readDb();
+      const existingTxIds = new Set(db.transactions.map((t) => t.id));
+      const newTxs = localDb.transactions.filter((t) => !existingTxIds.has(t.id));
+      if (newTxs.length > 0) {
+        const baseline = structuredClone(db);
+        db.transactions = [...newTxs, ...db.transactions];
+        recomputeGoalAmounts(db);
+        await writeSupabaseWorkspaceDelta(result.session, workspaceId, baseline, db);
+      }
+    }
+    recomputeGoalAmounts(db);
+    return NextResponse.json({ state: toPublicState(db) });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Gagal memproses autentikasi Supabase." },
+      { status: 500 },
+    );
+  }
+}

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { toIsoDate } from "@/lib/finance";
-import { readDb, toPublicState, writeDb } from "@/lib/store";
+import { readAsyncDb, toPublicState, writeAsyncDb } from "@/lib/store";
 
 export async function POST(request: Request) {
   try {
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
       accountId?: string;
     };
 
-    const db = readDb();
+    const db = await readAsyncDb();
     const nowIso = new Date().toISOString();
 
     if (body.action === "deposit_goal") {
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
         updatedAt: nowIso,
       });
 
-      writeDb(db);
+      await writeAsyncDb(db);
       return NextResponse.json(toPublicState(db), { status: 201 });
     }
 
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
       createdAt: nowIso,
     });
 
-    writeDb(db);
+    await writeAsyncDb(db);
     return NextResponse.json(toPublicState(db), { status: 201 });
   } catch (err) {
     return NextResponse.json(
@@ -86,7 +86,7 @@ export async function DELETE(request: Request) {
   if (!id) {
     return NextResponse.json({ error: "Parameter id wajib diisi." }, { status: 400 });
   }
-  const db = readDb();
+  const db = await readAsyncDb();
   db.goals = db.goals.filter((g) => g.id !== id);
   // Deleting a goal cancels its deposits so the money returns to the source account balance.
   const removedDepositIds = db.transactions
@@ -100,6 +100,6 @@ export async function DELETE(request: Request) {
       );
     }
   }
-  writeDb(db);
+  await writeAsyncDb(db);
   return NextResponse.json(toPublicState(db));
 }

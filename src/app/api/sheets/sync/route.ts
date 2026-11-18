@@ -4,11 +4,11 @@ import {
   syncTransactionsToSheet,
   transactionToSheetRow,
 } from "@/lib/google-sheets";
-import { readDb, toPublicState, writeDb } from "@/lib/store";
+import { readAsyncDb, toPublicState, writeAsyncDb } from "@/lib/store";
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as { full?: boolean };
-  const db = readDb();
+  const db = await readAsyncDb();
   if (!db.sheetConnection.connected) {
     const previewRows = [
       ["Transaction ID", "Tanggal", "Jenis", "Kategori", "Akun", "Nominal", "Keterangan", "Diperbarui"],
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
         );
 
     // Re-read latest state so concurrent local edits made during the HTTP call aren't overwritten.
-    const latest = readDb();
+    const latest = await readAsyncDb();
     latest.transactions = latest.transactions.map((t) => {
       const syncedVersion = targetVersionById.get(t.id);
       if (syncedVersion !== undefined && syncedVersion === t.updatedAt) {
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
     }
     latest.sheetConnection.lastSyncedAt = new Date().toISOString();
     latest.sheetConnection.lastError = undefined;
-    writeDb(latest);
+    await writeAsyncDb(latest);
 
     return NextResponse.json({
       mode: "live",
@@ -68,10 +68,10 @@ export async function POST(request: Request) {
       state: toPublicState(latest),
     });
   } catch (err) {
-    const latest = readDb();
+    const latest = await readAsyncDb();
     latest.sheetConnection.lastError =
       err instanceof Error ? err.message : "Gagal sinkron ke Google Sheets";
-    writeDb(latest);
+    await writeAsyncDb(latest);
     return NextResponse.json(
       { error: latest.sheetConnection.lastError },
       { status: 500 },
@@ -80,12 +80,12 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE() {
-  const db = readDb();
+  const db = await readAsyncDb();
   db.sheetConnection = {
     configured: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
     connected: false,
     sheetTabName: "Transaksi",
   };
-  writeDb(db);
+  await writeAsyncDb(db);
   return NextResponse.json(toPublicState(db));
 }

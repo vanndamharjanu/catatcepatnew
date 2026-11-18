@@ -1,10 +1,20 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { CATEGORY_ICON_OPTIONS, type AppDatabase, type CategoryItem, type Transaction } from "./types.ts";
 import { toIsoDate } from "./finance.ts";
+import {
+  getActiveSessionFromCookies,
+  isSupabaseConfigured,
+  readSupabaseWorkspace,
+  type SupabaseSession,
+  writeSupabaseWorkspaceDelta,
+} from "./supabase.ts";
 
-const DATA_DIR = path.join(process.cwd(), "data");
+const DATA_DIR = process.env.VERCEL
+  ? path.join(os.tmpdir(), "catatcepat-data")
+  : path.join(process.cwd(), "data");
 const DB_PATH = path.join(DATA_DIR, "catatcepat-db.json");
 
 export const PRESET_CATEGORIES: Record<
@@ -260,6 +270,11 @@ export function createInitialDb(): AppDatabase {
       connected: false,
       sheetTabName: "Transaksi",
     },
+    auth: {
+      configured: isSupabaseConfigured(),
+      authenticated: false,
+      mode: "local",
+    },
   };
 }
 
@@ -274,6 +289,11 @@ export function readDb(): AppDatabase {
   parsed.sheetConnection.configured = Boolean(
     process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET,
   );
+  parsed.auth = {
+    configured: isSupabaseConfigured(),
+    authenticated: false,
+    mode: "local",
+  };
   return parsed;
 }
 
@@ -296,6 +316,47 @@ export function writeDb(db: AppDatabase): void {
   const tempPath = `${DB_PATH}.tmp`;
   fs.writeFileSync(tempPath, JSON.stringify(db, null, 2), "utf8");
   fs.renameSync(tempPath, DB_PATH);
+}
+
+interface SupabaseTrackedContext {
+  session: SupabaseSession;
+  workspaceId: string;
+  baseline: AppDatabase;
+}
+
+const supabaseContextMap = new WeakMap<AppDatabase, SupabaseTrackedContext>();
+
+export async function readAsyncDb(): Promise<AppDatabase> {
+  if (isSupabaseConfigured()) {
+    const session = await getActiveSessionFromCookies();
+    if (session) {
+      const { workspaceId, db } = await readSupabaseWorkspace(session, createInitialDb());
+      recomputeGoalAmounts(db);
+      supabaseContextMap.set(db, {
+        session,
+        workspaceId,
+        baseline: structuredClone(db),
+      });
+      return db;
+    }
+  }
+  return readDb();
+}
+
+export async function writeAsyncDb(db: AppDatabase): Promise<void> {
+  recomputeGoalAmounts(db);
+  const tracked = supabaseContextMap.get(db);
+  if (tracked) {
+    await writeSupabaseWorkspaceDelta(
+      tracked.session,
+      tracked.workspaceId,
+      tracked.baseline,
+      db,
+    );
+    tracked.baseline = structuredClone(db);
+    return;
+  }
+  writeDb(db);
 }
 
 /** Explicitly load sample simulation transactions when user requests a demo preview. */

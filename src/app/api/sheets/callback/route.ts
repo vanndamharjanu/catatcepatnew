@@ -6,7 +6,7 @@ import {
   fetchGoogleUserEmail,
   syncTransactionsToSheet,
 } from "@/lib/google-sheets";
-import { readDb, writeDb } from "@/lib/store";
+import { readAsyncDb, writeAsyncDb } from "@/lib/store";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     const email = await fetchGoogleUserEmail(accessToken);
     const sheet = await createCatatCepatSpreadsheet(accessToken);
 
-    const db = readDb();
+    const db = await readAsyncDb();
     db.sheetConnection = {
       configured: true,
       connected: true,
@@ -45,13 +45,13 @@ export async function GET(request: Request) {
       db.transactions = db.transactions.map((t) => ({ ...t, sheetSyncStatus: "synced" }));
     }
 
-    writeDb(db);
+    await writeAsyncDb(db);
     return NextResponse.redirect(`${appUrl}/?sheets=connected`);
   } catch (err) {
-    const db = readDb();
+    const db = await readAsyncDb();
     db.sheetConnection.lastError =
       err instanceof Error ? err.message : "Gagal menghubungkan Google Sheets";
-    writeDb(db);
+    await writeAsyncDb(db);
     return NextResponse.redirect(`${appUrl}/?sheets=error`);
   }
 }

@@ -6,7 +6,7 @@ import {
   parseWithAI,
 } from "@/lib/ai-parser";
 import { answerFinancialQuestion } from "@/lib/finance";
-import { readDb } from "@/lib/store";
+import { readAsyncDb } from "@/lib/store";
 
 export async function POST(request: Request) {
   try {
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
       question?: string;
     };
 
-    const db = readDb();
+    const db = await readAsyncDb();
 
     if (body.mode === "ask") {
       const question = (body.question || "").trim();

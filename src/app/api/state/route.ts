@@ -5,16 +5,16 @@ import {
   buildPresetCategoryList,
   buildSimulationTransactions,
   deleteCategoryInDb,
-  readDb,
+  readAsyncDb,
   reorderCategoriesInDb,
   toPublicState,
   updateCategoryInDb,
-  writeDb,
+  writeAsyncDb,
 } from "@/lib/store";
 import type { WorkspaceSettings } from "@/lib/types";
 
 export async function GET() {
-  const db = readDb();
+  const db = await readAsyncDb();
   return NextResponse.json(toPublicState(db));
 }
 
@@ -36,12 +36,12 @@ export async function PATCH(request: Request) {
       initialBalances?: Record<string, number>;
     };
 
-    const db = readDb();
+    const db = await readAsyncDb();
 
     if (body.action === "load_simulation") {
       const sample = buildSimulationTransactions();
       db.transactions = [...sample, ...db.transactions];
-      writeDb(db);
+      await writeAsyncDb(db);
       return NextResponse.json(toPublicState(db));
     }
 
@@ -49,7 +49,7 @@ export async function PATCH(request: Request) {
       db.transactions = [];
       db.goals = [];
       db.sheetConnection.pendingDeletes = [];
-      writeDb(db);
+      await writeAsyncDb(db);
       return NextResponse.json(toPublicState(db));
     }
 
@@ -76,7 +76,7 @@ export async function PATCH(request: Request) {
         type: catType,
         iconKey,
       });
-      writeDb(db);
+      await writeAsyncDb(db);
       return NextResponse.json(toPublicState(db));
     }
 
@@ -88,7 +88,7 @@ export async function PATCH(request: Request) {
       if (!result.ok) {
         return NextResponse.json({ error: result.error }, { status: result.status });
       }
-      writeDb(db);
+      await writeAsyncDb(db);
       return NextResponse.json(toPublicState(db));
     }
 
@@ -98,7 +98,7 @@ export async function PATCH(request: Request) {
       if (!result.ok) {
         return NextResponse.json({ error: result.error }, { status: result.status });
       }
-      writeDb(db);
+      await writeAsyncDb(db);
       return NextResponse.json(toPublicState(db));
     }
 
@@ -107,7 +107,7 @@ export async function PATCH(request: Request) {
       if (!result.ok) {
         return NextResponse.json({ error: result.error }, { status: result.status });
       }
-      writeDb(db);
+      await writeAsyncDb(db);
       return NextResponse.json(toPublicState(db));
     }
 
@@ -141,7 +141,7 @@ export async function PATCH(request: Request) {
       }
     }
 
-    writeDb(db);
+    await writeAsyncDb(db);
     return NextResponse.json(toPublicState(db));
   } catch (err) {
     return NextResponse.json(

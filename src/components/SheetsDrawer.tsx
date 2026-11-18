@@ -32,6 +32,11 @@ export function SheetsDrawer({
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [migrateLocalOnAuth, setMigrateLocalOnAuth] = useState(true);
+  const [authInfoMsg, setAuthInfoMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -224,7 +229,7 @@ export function SheetsDrawer({
     }
   };
 
-  const { sheetConnection } = db;
+  const { sheetConnection, auth } = db;
   const pendingTxCount = sheetConnection.connected
     ? db.transactions.filter((t) => t.sheetSyncStatus === "pending").length
     : 0;
@@ -232,6 +237,94 @@ export function SheetsDrawer({
     ? (sheetConnection.pendingDeletes?.length ?? 0)
     : 0;
   const totalPendingCount = pendingTxCount + pendingDeleteCount;
+
+  const handleSupabaseAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setErrorMsg(null);
+    setAuthInfoMsg(null);
+    try {
+      const res = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: authMode,
+          email: authEmail,
+          password: authPassword,
+          migrateLocal: migrateLocalOnAuth,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        state?: AppDatabase;
+        needsEmailConfirmation?: boolean;
+        message?: string;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(data.error || "Gagal memproses autentikasi.");
+      if (data.needsEmailConfirmation) {
+        setAuthInfoMsg(data.message || "Cek email Anda untuk verifikasi pendaftaran.");
+        return;
+      }
+      if (data.state) {
+        onStateUpdated(data.state);
+        setAuthPassword("");
+        onNotify(
+          authMode === "register"
+            ? "Akun Cloud berhasil dibuat dan dihubungkan ke Supabase."
+            : `Berhasil masuk sebagai ${data.state.auth?.email || authEmail}.`,
+        );
+      }
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Gagal masuk ke Supabase.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSupabaseLogout = async () => {
+    setBusy(true);
+    setErrorMsg(null);
+    setAuthInfoMsg(null);
+    try {
+      const res = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "logout" }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { state?: AppDatabase; error?: string };
+      if (!res.ok || !data.state) throw new Error(data.error || "Gagal keluar akun.");
+      onStateUpdated(data.state);
+      onNotify("Keluar dari akun Cloud (kembali ke mode lokal).");
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Gagal keluar akun.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleMigrateLocalToCloud = async () => {
+    setBusy(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "migrate_local" }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        migratedCount?: number;
+        state?: AppDatabase;
+        error?: string;
+      };
+      if (!res.ok || !data.state) throw new Error(data.error || "Gagal menyalin data lokal.");
+      onStateUpdated(data.state);
+      onNotify(`Berhasil menyalin ${data.migratedCount ?? 0} transaksi lokal ke Supabase Cloud.`);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Gagal menyalin data lokal.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div
@@ -269,6 +362,137 @@ export function SheetsDrawer({
         </div>
 
         <div className="space-y-5 overflow-y-auto px-5 py-4">
+          {/* Supabase Cloud Multi-User Card */}
+          <section className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-extrabold text-[var(--text-primary)]">
+                  Database Cloud & Akun Multi-User (Supabase)
+                </h3>
+                <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                  {auth?.authenticated
+                    ? `Masuk sebagai ${auth.email || "User Cloud"} (terisolasi aman dengan RLS)`
+                    : auth?.configured
+                      ? "Supabase terdeteksi. Masuk atau daftar untuk menyimpan data di Cloud."
+                      : "Mode JSON Lokal aktif. Isi NEXT_PUBLIC_SUPABASE_URL & ANON_KEY di .env.local untuk mode Cloud."}
+                </p>
+              </div>
+              <span
+                className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                  auth?.authenticated
+                    ? "bg-[var(--income-bg)] text-[var(--income-text)]"
+                    : "bg-[var(--bg-soft)] text-[var(--brand-primary)] dark:text-[#fda4af]"
+                }`}
+              >
+                {auth?.authenticated
+                  ? "Cloud Aktif"
+                  : auth?.configured
+                    ? "Siap Login"
+                    : "Mode Lokal"}
+              </span>
+            </div>
+
+            {auth?.configured && !auth?.authenticated && (
+              <form onSubmit={handleSupabaseAuth} className="mt-3 space-y-2.5">
+                <div className="flex gap-1.5 rounded-xl bg-[var(--bg-card)] p-1 text-xs font-bold">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthMode("login");
+                      setAuthInfoMsg(null);
+                    }}
+                    className={`flex-1 rounded-lg py-1.5 ${
+                      authMode === "login"
+                        ? "bg-[var(--brand-primary)] text-white"
+                        : "text-[var(--text-muted)]"
+                    }`}
+                  >
+                    Masuk
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthMode("register");
+                      setAuthInfoMsg(null);
+                    }}
+                    className={`flex-1 rounded-lg py-1.5 ${
+                      authMode === "register"
+                        ? "bg-[var(--brand-primary)] text-white"
+                        : "text-[var(--text-muted)]"
+                    }`}
+                  >
+                    Daftar Baru
+                  </button>
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <input
+                    type="email"
+                    required
+                    placeholder="Email Anda"
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    className="min-h-[40px] w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 text-xs font-bold text-[var(--text-primary)]"
+                  />
+                  <input
+                    type="password"
+                    required
+                    minLength={6}
+                    placeholder="Password (min. 6 karakter)"
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    className="min-h-[40px] w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 text-xs font-bold text-[var(--text-primary)]"
+                  />
+                </div>
+
+                <label className="flex items-center gap-2 text-[11px] text-[var(--text-muted)]">
+                  <input
+                    type="checkbox"
+                    checked={migrateLocalOnAuth}
+                    onChange={(e) => setMigrateLocalOnAuth(e.target.checked)}
+                    className="rounded"
+                  />
+                  <span>Salin transaksi lokal saat ini ke workspace Cloud setelah masuk</span>
+                </label>
+
+                {authInfoMsg && (
+                  <p className="rounded-xl bg-[var(--bg-soft)] px-3 py-2 text-xs font-bold text-[var(--brand-primary)] dark:text-[#fda4af]">
+                    {authInfoMsg}
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={busy}
+                  className="min-h-[40px] rounded-xl bg-[var(--brand-primary)] px-4 text-xs font-bold text-white hover:bg-[var(--brand-hover)] disabled:opacity-60"
+                >
+                  {authMode === "register" ? "Daftar & Buat Workspace Cloud" : "Masuk ke Workspace Cloud"}
+                </button>
+              </form>
+            )}
+
+            {auth?.authenticated && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={handleMigrateLocalToCloud}
+                  className="min-h-[40px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3.5 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)] disabled:opacity-60"
+                >
+                  Salin Data Lokal ke Cloud
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={handleSupabaseLogout}
+                  className="min-h-[40px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3.5 text-xs font-bold text-[var(--expense-text)] disabled:opacity-60"
+                >
+                  Keluar Akun
+                </button>
+              </div>
+            )}
+          </section>
+
           {/* Google Sheets Connector Card */}
           <section className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">

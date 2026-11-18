@@ -14,7 +14,9 @@ import {
   countElapsedDays,
 } from "../src/lib/finance.ts";
 import { buildIncrementalSyncPlan, chunkRows, SHEET_HEADERS } from "../src/lib/google-sheets.ts";
+import { computeDbDiff } from "../src/lib/supabase.ts";
 import {
+  createInitialDb,
   deleteCategoryInDb,
   parseLegacyCsv,
   PRESET_CATEGORIES,
@@ -350,7 +352,28 @@ function runTests() {
   assert.deepEqual(chunkRows([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
   assert.deepEqual(chunkRows([], 2), []);
 
-  console.log("ALL CORE TESTS PASSED (15/15)");
+  // 16. Supabase delta diff computes only modified rows to minimize database egress
+  const baseDb = createInitialDb();
+  baseDb.transactions = [...txs];
+  const mutatedDb = structuredClone(baseDb);
+  mutatedDb.transactions.unshift({
+    ...txs[0],
+    id: "tx-new-cloud",
+    amount: 75_000,
+    updatedAt: "2026-11-18T11:00:00.000Z",
+  });
+  mutatedDb.transactions = mutatedDb.transactions.filter((t) => t.id !== "2");
+
+  const dbDelta = computeDbDiff(baseDb, mutatedDb);
+  assert.equal(dbDelta.settingsChanged, false);
+  assert.equal(dbDelta.upsertedAccounts.length, 0);
+  assert.equal(dbDelta.upsertedCategories.length, 0);
+  assert.equal(dbDelta.upsertedTransactions.length, 1);
+  assert.equal(dbDelta.upsertedTransactions[0].id, "tx-new-cloud");
+  assert.deepEqual(dbDelta.deletedTransactionIds, ["2"]);
+  assert.equal(dbDelta.clearAllTransactions, false);
+
+  console.log("ALL CORE TESTS PASSED (16/16)");
 }
 
 runTests();
