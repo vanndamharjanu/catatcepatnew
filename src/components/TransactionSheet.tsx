@@ -13,8 +13,10 @@ import {
   ArrowInIcon,
   ArrowOutIcon,
   CameraIcon,
+  CATEGORY_ICON_OPTIONS,
   CategoryIcon,
   CloseIcon,
+  GripIcon,
   MicIcon,
   TransferIcon,
 } from "./Icons";
@@ -30,6 +32,8 @@ interface TransactionSheetProps {
   /** Current balance per account id, used to warn before a balance goes negative. */
   balances?: Record<string, number>;
   categories: CategoryItem[];
+  /** Transaction count per `${type}:${category}` key, used when confirming deletion. */
+  categoryTxCounts?: Record<string, number>;
   onClose: () => void;
   onSaveSingle: (payload: {
     id?: string;
@@ -42,8 +46,13 @@ interface TransactionSheetProps {
     note: string;
   }) => Promise<void>;
   onSaveBatch: (drafts: ParsedTransactionDraft[]) => Promise<void>;
-  onAddCategory: (name: string, type: "Masuk" | "Keluar") => Promise<void>;
-  onDeleteCategory: (id: string) => Promise<void>;
+  onAddCategory: (name: string, type: "Masuk" | "Keluar", iconKey: string) => Promise<void>;
+  onUpdateCategory: (
+    id: string,
+    updates: { name?: string; iconKey?: string },
+  ) => Promise<void>;
+  onDeleteCategory: (id: string, replacementCategory?: string) => Promise<void>;
+  onReorderCategories: (type: "Masuk" | "Keluar", orderedIds: string[]) => Promise<void>;
 }
 
 const QUICK_AMOUNTS = [
@@ -84,11 +93,14 @@ export function TransactionSheet({
   accounts,
   balances,
   categories,
+  categoryTxCounts,
   onClose,
   onSaveSingle,
   onSaveBatch,
   onAddCategory,
+  onUpdateCategory,
   onDeleteCategory,
+  onReorderCategories,
 }: TransactionSheetProps) {
   const [mode, setMode] = useState<"manual" | "ai">(initialTab);
   const [txType, setTxType] = useState<TransactionType>(initialType);
@@ -102,6 +114,14 @@ export function TransactionSheet({
   // Category manager inline state
   const [managingCats, setManagingCats] = useState(false);
   const [newCatName, setNewCatName] = useState("");
+  const [newCatIcon, setNewCatIcon] = useState("tag");
+  const [editingCatId, setEditingCatId] = useState<string | null>(null);
+  const [editCatName, setEditCatName] = useState("");
+  const [deletingCatId, setDeletingCatId] = useState<string | null>(null);
+  const [replacementCat, setReplacementCat] = useState("");
+  const [catBusy, setCatBusy] = useState(false);
+  const [dragIds, setDragIds] = useState<string[] | null>(null);
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
 
   // AI & Voice state
   const [aiText, setAiText] = useState("");
@@ -116,17 +136,51 @@ export function TransactionSheet({
 
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const wasOpenRef = useRef(false);
+  const prevEditIdRef = useRef<string | null>(null);
+  const dragCleanupRef = useRef<(() => void) | null>(null);
+  const didDragRef = useRef(false);
+  const onReorderRef = useRef(onReorderCategories);
+  onReorderRef.current = onReorderCategories;
 
   const filteredCats = categories.filter(
     (c) => c.type === (txType === "Masuk" ? "Masuk" : "Keluar"),
   );
+  const displayedCats = dragIds
+    ? dragIds
+        .map((id) => filteredCats.find((c) => c.id === id))
+        .filter((c): c is CategoryItem => Boolean(c))
+    : filteredCats;
+  const editingCat = editingCatId ? filteredCats.find((c) => c.id === editingCatId) ?? null : null;
+  const deletingCat = deletingCatId ? filteredCats.find((c) => c.id === deletingCatId) ?? null : null;
+  const deletingOtherCats = deletingCat
+    ? filteredCats.filter((c) => c.id !== deletingCat.id)
+    : [];
+  const deletingTxCount = deletingCat
+    ? categoryTxCounts?.[`${deletingCat.type}:${deletingCat.name}`] ?? 0
+    : 0;
 
-  // Sync initial props whenever dialog opens
+  // Initialize fields only when opening or switching editingTx (so category updates don't reset inputs)
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      wasOpenRef.current = false;
+      prevEditIdRef.current = null;
+      return;
+    }
+    const currentEditId = editingTx?.id ?? null;
+    if (wasOpenRef.current && prevEditIdRef.current === currentEditId) return;
+    wasOpenRef.current = true;
+    prevEditIdRef.current = currentEditId;
+
     setFormError(null);
     setAiError(null);
     setManagingCats(false);
+    setNewCatName("");
+    setNewCatIcon("tag");
+    setEditingCatId(null);
+    setEditCatName("");
+    setDeletingCatId(null);
+    setReplacementCat("");
     if (editingTx) {
       setMode("manual");
       setTxType(editingTx.type);
@@ -152,6 +206,30 @@ export function TransactionSheet({
       setAiEngine(null);
     }
   }, [open, editingTx, initialTab, initialType, initialAccountId, accounts, categories]);
+
+  // Clear category edit/delete state when switching transaction type
+  useEffect(() => {
+    setEditingCatId(null);
+    setEditCatName("");
+    setDeletingCatId(null);
+    setReplacementCat("");
+    setDragIds(null);
+    setActiveDragId(null);
+  }, [txType]);
+
+  // Ensure window pointer listeners are cleaned up on close, unmount, or leaving manage mode
+  useEffect(() => {
+    if (!open || !managingCats) {
+      dragCleanupRef.current?.();
+      dragCleanupRef.current = null;
+      setDragIds(null);
+      setActiveDragId(null);
+    }
+    return () => {
+      dragCleanupRef.current?.();
+      dragCleanupRef.current = null;
+    };
+  }, [open, managingCats]);
 
   // Keep selected category aligned when toggling Keluar <-> Masuk
   useEffect(() => {
@@ -225,6 +303,180 @@ export function TransactionSheet({
   const handleQuickAdd = (delta: number) => {
     setAmountRaw(String(numericAmount + delta));
     setFormError(null);
+  };
+
+  const handleCreateCategory = async () => {
+    const name = newCatName.trim();
+    if (!name || catBusy) return;
+    setCatBusy(true);
+    try {
+      await onAddCategory(name, txType === "Masuk" ? "Masuk" : "Keluar", newCatIcon);
+      setCategory(name);
+      setNewCatName("");
+      setNewCatIcon("tag");
+      setFormError(null);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Gagal menambah kategori.");
+    } finally {
+      setCatBusy(false);
+    }
+  };
+
+  const handleRenameCategory = async () => {
+    if (!editingCat || catBusy) return;
+    const trimmed = editCatName.trim();
+    if (!trimmed) {
+      setFormError("Nama kategori wajib diisi.");
+      return;
+    }
+    setCatBusy(true);
+    try {
+      const oldName = editingCat.name;
+      await onUpdateCategory(editingCat.id, { name: trimmed });
+      if (category === oldName) setCategory(trimmed);
+      setFormError(null);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Gagal mengubah nama kategori.");
+    } finally {
+      setCatBusy(false);
+    }
+  };
+
+  const handleConfirmDeleteCategory = async () => {
+    if (!deletingCat || catBusy) return;
+    setCatBusy(true);
+    try {
+      const targetName =
+        deletingTxCount > 0 ? replacementCat : undefined;
+      await onDeleteCategory(deletingCat.id, targetName);
+      if (category === deletingCat.name) {
+        setCategory(targetName || deletingOtherCats[0]?.name || "Lain-lain");
+      }
+      setDeletingCatId(null);
+      setFormError(null);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Gagal menghapus kategori.");
+    } finally {
+      setCatBusy(false);
+    }
+  };
+
+  const startCategoryDrag = (e: React.PointerEvent, catId: string, fromHandle: boolean) => {
+    if (!managingCats || catBusy || filteredCats.length <= 1) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    if (fromHandle) e.stopPropagation();
+
+    dragCleanupRef.current?.();
+    const catType: "Masuk" | "Keluar" = txType === "Masuk" ? "Masuk" : "Keluar";
+    const originalOrder = filteredCats.map((c) => c.id);
+    const state = {
+      id: catId,
+      startX: e.clientX,
+      startY: e.clientY,
+      active: fromHandle,
+      order: [...originalOrder],
+    };
+
+    didDragRef.current = false;
+    let holdTimer: number | null = null;
+    if (fromHandle) {
+      setActiveDragId(catId);
+      setDragIds(state.order);
+    } else if (e.pointerType !== "mouse") {
+      // Allow touch press-and-hold on the card body ("cubit terus geser") without blocking quick scroll swipes.
+      holdTimer = window.setTimeout(() => {
+        holdTimer = null;
+        if (state.active) return;
+        state.active = true;
+        didDragRef.current = true;
+        setActiveDragId(catId);
+        setDragIds([...state.order]);
+      }, 220);
+    }
+
+    const onMove = (ev: PointerEvent) => {
+      if (!state.active) {
+        const dist = Math.hypot(ev.clientX - state.startX, ev.clientY - state.startY);
+        if (ev.pointerType !== "mouse") {
+          if (dist > 8) cleanup(false);
+          return;
+        }
+        if (dist <= 6) return;
+        state.active = true;
+        didDragRef.current = true;
+        setActiveDragId(catId);
+        setDragIds([...state.order]);
+      }
+
+      if (ev.cancelable) ev.preventDefault();
+      const target = document
+        .elementFromPoint(ev.clientX, ev.clientY)
+        ?.closest<HTMLElement>("[data-cat-id]");
+      const overId = target?.dataset.catId;
+      if (!overId || overId === state.id) return;
+
+      const fromIdx = state.order.indexOf(state.id);
+      const toIdx = state.order.indexOf(overId);
+      if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
+
+      const next = [...state.order];
+      const [moved] = next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, moved);
+      state.order = next;
+      didDragRef.current = true;
+      setDragIds(next);
+    };
+
+    const cleanup = (commit: boolean) => {
+      if (holdTimer !== null) {
+        window.clearTimeout(holdTimer);
+        holdTimer = null;
+      }
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+      dragCleanupRef.current = null;
+      setActiveDragId(null);
+
+      if (!commit || !state.active) {
+        setDragIds(null);
+        return;
+      }
+
+      if (didDragRef.current) {
+        window.setTimeout(() => {
+          didDragRef.current = false;
+        }, 0);
+      }
+
+      const changed = state.order.some((id, idx) => id !== originalOrder[idx]);
+      if (!changed) {
+        setDragIds(null);
+        return;
+      }
+
+      setCatBusy(true);
+      void onReorderRef
+        .current(catType, state.order)
+        .then(() => {
+          setFormError(null);
+        })
+        .catch((err) => {
+          setFormError(err instanceof Error ? err.message : "Gagal menyimpan urutan kategori.");
+        })
+        .finally(() => {
+          setDragIds(null);
+          setCatBusy(false);
+        });
+    };
+
+    const onUp = () => cleanup(true);
+    const onCancel = () => cleanup(false);
+
+    window.addEventListener("pointermove", onMove, { passive: false });
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+    dragCleanupRef.current = () => cleanup(false);
   };
 
   const todayIso = toIsoDate();
@@ -538,7 +790,12 @@ export function TransactionSheet({
                     <span className="text-xs font-bold text-[var(--text-muted)]">Kategori</span>
                     <button
                       type="button"
-                      onClick={() => setManagingCats((v) => !v)}
+                      onClick={() => {
+                        setManagingCats((v) => !v);
+                        setEditingCatId(null);
+                        setEditCatName("");
+                        setDeletingCatId(null);
+                      }}
                       className="text-xs font-bold text-[var(--brand-primary)] underline-offset-2 hover:underline dark:text-[#fda4af]"
                     >
                       {managingCats ? "Selesai kelola" : "Kelola kategori"}
@@ -546,63 +803,266 @@ export function TransactionSheet({
                   </div>
 
                   {managingCats && (
-                    <div className="mb-3 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-3">
-                      <label
-                        htmlFor="new-cat-name"
-                        className="mb-1.5 block text-xs font-bold text-[var(--text-primary)]"
-                      >
-                        Tambah Kategori {txType}
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          id="new-cat-name"
-                          type="text"
-                          value={newCatName}
-                          onChange={(e) => setNewCatName(e.target.value)}
-                          placeholder="Nama kategori baru"
-                          className="min-h-[40px] flex-1 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 text-xs text-[var(--text-primary)]"
-                        />
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            const name = newCatName.trim();
-                            if (!name) return;
-                            try {
-                              await onAddCategory(name, txType === "Masuk" ? "Masuk" : "Keluar");
-                              setCategory(name);
-                              setNewCatName("");
-                              setFormError(null);
-                            } catch (err) {
-                              setFormError(err instanceof Error ? err.message : "Gagal menambah kategori.");
-                            }
-                          }}
-                          className="rounded-xl bg-[var(--brand-primary)] px-3.5 text-xs font-bold text-white"
-                        >
-                          Tambah
-                        </button>
-                      </div>
+                    <div className="mb-3 space-y-3 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-3">
+                      {deletingCat ? (
+                        <div className="space-y-2.5">
+                          <p className="text-xs font-extrabold text-[var(--expense-text)]">
+                            Hapus kategori &ldquo;{deletingCat.name}&rdquo;?
+                          </p>
+                          {deletingTxCount > 0 ? (
+                            <div>
+                              <label
+                                htmlFor="replacement-cat-select"
+                                className="mb-1.5 block text-xs text-[var(--text-primary)]"
+                              >
+                                Kategori ini dipakai di <strong>{deletingTxCount} transaksi</strong>.
+                                Pilih kategori pengganti untuk memindahkan transaksi tersebut:
+                              </label>
+                              <select
+                                id="replacement-cat-select"
+                                value={replacementCat}
+                                onChange={(e) => setReplacementCat(e.target.value)}
+                                className="min-h-[40px] w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 text-xs font-bold text-[var(--text-primary)]"
+                              >
+                                {deletingOtherCats.map((c) => (
+                                  <option key={c.id} value={c.name}>
+                                    {c.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-[var(--text-muted)]">
+                              Kategori ini belum dipakai di transaksi mana pun.
+                            </p>
+                          )}
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              disabled={catBusy}
+                              onClick={handleConfirmDeleteCategory}
+                              className="min-h-[38px] flex-1 rounded-xl bg-[#BE123C] px-3 text-xs font-bold text-white disabled:opacity-50"
+                            >
+                              {deletingTxCount > 0 ? "Pindahkan & Hapus" : "Ya, Hapus"}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={catBusy}
+                              onClick={() => setDeletingCatId(null)}
+                              className="min-h-[38px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3.5 text-xs font-bold text-[var(--text-primary)]"
+                            >
+                              Batal
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {editingCat ? (
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <label
+                                  htmlFor="edit-cat-name"
+                                  className="text-xs font-bold text-[var(--text-primary)]"
+                                >
+                                  Edit Kategori
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingCatId(null);
+                                    setEditCatName("");
+                                  }}
+                                  className="text-xs font-bold text-[var(--brand-primary)] hover:underline dark:text-[#fda4af]"
+                                >
+                                  Tambah kategori baru
+                                </button>
+                              </div>
+                              <div className="flex gap-2">
+                                <input
+                                  id="edit-cat-name"
+                                  type="text"
+                                  value={editCatName}
+                                  onChange={(e) => setEditCatName(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      void handleRenameCategory();
+                                    }
+                                  }}
+                                  placeholder="Nama kategori"
+                                  className="min-h-[40px] flex-1 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 text-xs text-[var(--text-primary)]"
+                                />
+                                <button
+                                  type="button"
+                                  disabled={
+                                    catBusy ||
+                                    !editCatName.trim() ||
+                                    editCatName.trim() === editingCat.name
+                                  }
+                                  onClick={handleRenameCategory}
+                                  className="rounded-xl bg-[var(--brand-primary)] px-3.5 text-xs font-bold text-white disabled:opacity-50"
+                                >
+                                  Simpan
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              <label
+                                htmlFor="new-cat-name"
+                                className="mb-1.5 block text-xs font-bold text-[var(--text-primary)]"
+                              >
+                                Tambah Kategori {txType}
+                              </label>
+                              <div className="flex gap-2">
+                                <input
+                                  id="new-cat-name"
+                                  type="text"
+                                  value={newCatName}
+                                  onChange={(e) => setNewCatName(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      void handleCreateCategory();
+                                    }
+                                  }}
+                                  placeholder="Nama kategori baru"
+                                  className="min-h-[40px] flex-1 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 text-xs text-[var(--text-primary)]"
+                                />
+                                <button
+                                  type="button"
+                                  disabled={catBusy || !newCatName.trim()}
+                                  onClick={handleCreateCategory}
+                                  className="rounded-xl bg-[var(--brand-primary)] px-3.5 text-xs font-bold text-white disabled:opacity-50"
+                                >
+                                  Tambah
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          <div>
+                            <div className="mb-1.5 flex items-center justify-between text-[11px]">
+                              <span className="font-bold text-[var(--text-muted)]">
+                                {editingCat ? "Pilih ikon baru:" : "Pilih ikon kategori:"}
+                              </span>
+                              <span className="font-bold text-[var(--text-primary)]">
+                                {CATEGORY_ICON_OPTIONS.find(
+                                  (o) => o.key === (editingCat ? editingCat.iconKey : newCatIcon),
+                                )?.label ?? "Lain-lain"}
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-8">
+                              {CATEGORY_ICON_OPTIONS.map((opt) => {
+                                const activeKey = editingCat ? editingCat.iconKey : newCatIcon;
+                                const isPicked =
+                                  activeKey === opt.key ||
+                                  (activeKey === "piggy" && opt.key === "savings");
+                                return (
+                                  <button
+                                    key={opt.key}
+                                    type="button"
+                                    disabled={catBusy}
+                                    title={opt.label}
+                                    aria-label={`Pilih ikon ${opt.label}`}
+                                    aria-pressed={isPicked}
+                                    onClick={async () => {
+                                      if (editingCat) {
+                                        setCatBusy(true);
+                                        try {
+                                          await onUpdateCategory(editingCat.id, { iconKey: opt.key });
+                                          setFormError(null);
+                                        } catch (err) {
+                                          setFormError(
+                                            err instanceof Error ? err.message : "Gagal mengubah ikon.",
+                                          );
+                                        } finally {
+                                          setCatBusy(false);
+                                        }
+                                      } else {
+                                        setNewCatIcon(opt.key);
+                                      }
+                                    }}
+                                    className={`flex h-9 items-center justify-center rounded-xl border transition-colors ${
+                                      isPicked
+                                        ? "border-[var(--brand-primary)] bg-[var(--brand-primary)] text-white"
+                                        : "border-[var(--border-subtle)] bg-[var(--bg-card)] text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
+                                    }`}
+                                  >
+                                    <CategoryIcon iconKey={opt.key} className="h-4 w-4" />
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {!editingCat && (
+                            <p className="text-[11px] text-[var(--text-muted)]">
+                              Tip: tahan &amp; geser ikon ⋮⋮ (atau seret kartu di PC) untuk atur urutan, ketuk kartu
+                              untuk ubah nama/ikon, atau × untuk hapus.
+                            </p>
+                          )}
+                        </>
+                      )}
                     </div>
                   )}
 
-                  <div className="grid grid-cols-3 gap-2">
-                    {filteredCats.map((cat) => {
+                  <div className={`grid grid-cols-3 gap-2 ${managingCats ? "select-none" : ""}`}>
+                    {displayedCats.map((cat) => {
                       const selected = category === cat.name;
+                      const isEditingTile = managingCats && editingCatId === cat.id;
+                      const isDeletingTile = managingCats && deletingCatId === cat.id;
+                      const isDraggingTile = activeDragId === cat.id;
                       return (
-                        <div key={cat.id} className="relative">
+                        <div
+                          key={cat.id}
+                          data-cat-id={cat.id}
+                          className={`relative transition-transform ${
+                            isDraggingTile ? "z-10 scale-[1.03]" : ""
+                          }`}
+                        >
                           <button
                             type="button"
-                            onClick={() => setCategory(cat.name)}
-                            className={`flex min-h-[74px] w-full flex-col items-center justify-center gap-1.5 rounded-2xl border p-2 text-center transition-all ${
-                              selected
-                                ? "border-[var(--brand-primary)] bg-[var(--bg-soft)] text-[var(--brand-primary)] dark:text-[#fda4af]"
-                                : "border-[var(--border-subtle)] bg-[var(--bg-card)] text-[var(--text-primary)] hover:bg-[var(--bg-soft)]/50"
+                            onPointerDown={(e) => startCategoryDrag(e, cat.id, false)}
+                            onClick={() => {
+                              if (didDragRef.current) {
+                                didDragRef.current = false;
+                                return;
+                              }
+                              if (managingCats) {
+                                setDeletingCatId(null);
+                                if (editingCatId === cat.id) {
+                                  setEditingCatId(null);
+                                  setEditCatName("");
+                                } else {
+                                  setEditingCatId(cat.id);
+                                  setEditCatName(cat.name);
+                                }
+                              } else {
+                                setCategory(cat.name);
+                              }
+                            }}
+                            className={`flex w-full flex-col items-center justify-center gap-1.5 rounded-2xl border p-2 text-center transition-all ${
+                              managingCats ? "h-[80px] cursor-grab active:cursor-grabbing" : "min-h-[74px]"
+                            } ${
+                              isDraggingTile
+                                ? "border-[var(--brand-primary)] bg-[var(--bg-soft)] shadow-md ring-2 ring-[var(--brand-primary)] text-[var(--brand-primary)] dark:text-[#fda4af]"
+                                : isDeletingTile
+                                  ? "border-[#BE123C] bg-[var(--expense-bg)] text-[var(--expense-text)]"
+                                  : isEditingTile
+                                    ? "border-dashed border-[var(--brand-primary)] bg-[var(--bg-soft)] ring-2 ring-[var(--brand-ring)] text-[var(--brand-primary)] dark:text-[#fda4af]"
+                                    : selected
+                                      ? "border-[var(--brand-primary)] bg-[var(--bg-soft)] text-[var(--brand-primary)] dark:text-[#fda4af]"
+                                      : "border-[var(--border-subtle)] bg-[var(--bg-card)] text-[var(--text-primary)] hover:bg-[var(--bg-soft)]/50"
                             }`}
                           >
                             <span
                               className={`flex h-8 w-8 items-center justify-center rounded-xl ${
-                                selected
-                                  ? "bg-[var(--brand-primary)] text-white"
-                                  : "bg-[var(--bg-soft)] text-[var(--brand-primary)] dark:text-[#fda4af]"
+                                isDeletingTile
+                                  ? "bg-[#BE123C] text-white"
+                                  : selected || isEditingTile || isDraggingTile
+                                    ? "bg-[var(--brand-primary)] text-white"
+                                    : "bg-[var(--bg-soft)] text-[var(--brand-primary)] dark:text-[#fda4af]"
                               }`}
                             >
                               <CategoryIcon iconKey={cat.iconKey} className="h-4 w-4" />
@@ -612,17 +1072,36 @@ export function TransactionSheet({
                             </span>
                           </button>
                           {managingCats && filteredCats.length > 1 && (
+                            <span
+                              role="button"
+                              tabIndex={-1}
+                              aria-label={`Geser posisi kategori ${cat.name}`}
+                              onPointerDown={(e) => startCategoryDrag(e, cat.id, true)}
+                              onClick={(e) => e.stopPropagation()}
+                              style={{ touchAction: "none" }}
+                              className="absolute left-1 top-1 flex h-7 w-6 cursor-grab items-center justify-center rounded-lg text-[var(--text-muted)] hover:bg-[var(--bg-soft)] active:cursor-grabbing"
+                            >
+                              <GripIcon className="h-3.5 w-3.5" />
+                            </span>
+                          )}
+                          {managingCats && filteredCats.length > 1 && (
                             <button
                               type="button"
+                              disabled={catBusy}
                               aria-label={`Hapus kategori ${cat.name}`}
-                              onClick={async () => {
-                                try {
-                                  await onDeleteCategory(cat.id);
-                                } catch (err) {
-                                  setFormError(err instanceof Error ? err.message : "Gagal menghapus kategori.");
-                                }
+                              onPointerDown={(e) => e.stopPropagation()}
+                              onClick={() => {
+                                const others = filteredCats.filter((c) => c.id !== cat.id);
+                                const preferred =
+                                  others.find((c) => c.name === "Lain-lain")?.name ||
+                                  others[0]?.name ||
+                                  "";
+                                setEditingCatId(null);
+                                setDeletingCatId(cat.id);
+                                setReplacementCat(preferred);
+                                setFormError(null);
                               }}
-                              className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full bg-[#BE123C] text-xs font-bold text-white shadow-xs"
+                              className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full bg-[#BE123C] text-xs font-bold text-white shadow-xs disabled:opacity-50"
                             >
                               ×
                             </button>

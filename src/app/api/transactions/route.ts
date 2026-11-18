@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { computeAccountBalances, formatRupiah, toIsoDate } from "@/lib/finance";
-import { syncTransactionsToSheet } from "@/lib/google-sheets";
+import { tryAutoSync } from "@/lib/google-sheets";
 import { readDb, toPublicState, writeDb } from "@/lib/store";
 import type { Account, Transaction, TransactionSource, TransactionType } from "@/lib/types";
 
@@ -52,19 +52,6 @@ function validateTxInput(raw: TransactionInput, accounts: Account[]): ValidTx | 
     note: (raw.note || "").trim().slice(0, 200),
     source: raw.source || "manual",
   };
-}
-
-async function tryAutoSync(db: ReturnType<typeof readDb>) {
-  if (!db.sheetConnection.connected) return;
-  try {
-    await syncTransactionsToSheet(db.sheetConnection, db.transactions, db.accounts);
-    db.transactions = db.transactions.map((tx) => ({ ...tx, sheetSyncStatus: "synced" }));
-    db.sheetConnection.lastSyncedAt = new Date().toISOString();
-    db.sheetConnection.lastError = undefined;
-  } catch (err) {
-    db.sheetConnection.lastError =
-      err instanceof Error ? err.message : "Gagal sinkronisasi ke Google Sheets";
-  }
 }
 
 export async function POST(request: Request) {

@@ -7,8 +7,15 @@ import {
   computeStreak,
   countElapsedDays,
 } from "../src/lib/finance.ts";
-import { parseLegacyCsv, recomputeGoalAmounts } from "../src/lib/store.ts";
-import type { Account, AppDatabase, Transaction } from "../src/lib/types.ts";
+import {
+  deleteCategoryInDb,
+  parseLegacyCsv,
+  PRESET_CATEGORIES,
+  recomputeGoalAmounts,
+  reorderCategoriesInDb,
+  updateCategoryInDb,
+} from "../src/lib/store.ts";
+import { CATEGORY_ICON_OPTIONS, type Account, type AppDatabase, type Transaction } from "../src/lib/types.ts";
 
 const sampleAccounts: Account[] = [
   { id: "acc-cash", name: "Tunai", kind: "cash", initialBalance: 0 },
@@ -203,7 +210,63 @@ function runTests() {
   const seededBalances = computeAccountBalances(seededAccounts, txs);
   assert.equal(seededBalances.find((b) => b.id === "acc-cash")?.balance, 481_000);
 
-  console.log("ALL CORE TESTS PASSED (9/9)");
+  // 10. Category icon options are unique and cover every preset category iconKey
+  const iconKeys = CATEGORY_ICON_OPTIONS.map((o) => o.key);
+  assert.equal(new Set(iconKeys).size, iconKeys.length);
+  for (const preset of Object.values(PRESET_CATEGORIES)) {
+    for (const item of [...preset.keluar, ...preset.masuk]) {
+      assert.ok(iconKeys.includes(item.iconKey as (typeof iconKeys)[number]), `Missing icon: ${item.iconKey}`);
+    }
+  }
+
+  // 11. Category rename updates matching transactions; delete reassigns to chosen replacement
+  const catDb = {
+    categories: [
+      { id: "c1", name: "Makanan", type: "Keluar", iconKey: "utensils" },
+      { id: "c2", name: "Makanan dan Minuman", type: "Keluar", iconKey: "coffee" },
+      { id: "c3", name: "Gaji", type: "Masuk", iconKey: "briefcase" },
+    ],
+    transactions: [
+      { ...txs[1], id: "t-k", type: "Keluar", category: "Makanan" },
+      { ...txs[0], id: "t-m", type: "Masuk", category: "Gaji" },
+    ],
+    sheetConnection: { configured: false, connected: false, sheetTabName: "Transaksi" },
+  } as unknown as AppDatabase;
+
+  const dupRes = updateCategoryInDb(catDb, "c1", { name: "makanan dan minuman" });
+  assert.equal(dupRes.ok, false);
+
+  const renRes = updateCategoryInDb(catDb, "c1", { name: "Konsumsi", iconKey: "coffee" });
+  assert.equal(renRes.ok, true);
+  assert.equal(catDb.categories[0].name, "Konsumsi");
+  assert.equal(catDb.categories[0].iconKey, "coffee");
+  assert.equal(catDb.transactions[0].category, "Konsumsi");
+
+  const badDel = deleteCategoryInDb(catDb, "c1");
+  assert.equal(badDel.ok, false);
+
+  const okDel = deleteCategoryInDb(catDb, "c1", "Makanan dan Minuman");
+  assert.equal(okDel.ok, true);
+  assert.equal(catDb.categories.some((c) => c.id === "c1"), false);
+  assert.equal(catDb.transactions[0].category, "Makanan dan Minuman");
+  assert.equal(catDb.transactions[1].category, "Gaji");
+
+  // 12. Reorder categories within a type preserves opposite-type categories and rejects bad IDs
+  catDb.categories.push({ id: "c4", name: "Transportasi", type: "Keluar", iconKey: "bus" });
+  const badReorder = reorderCategoriesInDb(catDb, "Keluar", ["c2"]);
+  assert.equal(badReorder.ok, false);
+  const okReorder = reorderCategoriesInDb(catDb, "Keluar", ["c4", "c2"]);
+  assert.equal(okReorder.ok, true);
+  assert.deepEqual(
+    catDb.categories.filter((c) => c.type === "Keluar").map((c) => c.id),
+    ["c4", "c2"],
+  );
+  assert.deepEqual(
+    catDb.categories.filter((c) => c.type === "Masuk").map((c) => c.id),
+    ["c3"],
+  );
+
+  console.log("ALL CORE TESTS PASSED (12/12)");
 }
 
 runTests();

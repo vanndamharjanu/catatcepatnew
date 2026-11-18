@@ -1,10 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
+import { tryAutoSync } from "@/lib/google-sheets";
 import {
+  ALLOWED_CATEGORY_ICONS,
   buildPresetCategoryList,
   buildSimulationTransactions,
+  deleteCategoryInDb,
   readDb,
+  reorderCategoriesInDb,
   toPublicState,
+  updateCategoryInDb,
   writeDb,
 } from "@/lib/store";
 import type { WorkspaceSettings } from "@/lib/types";
@@ -25,6 +30,9 @@ export async function PATCH(request: Request) {
       categoryName?: string;
       categoryType?: "Masuk" | "Keluar";
       categoryId?: string;
+      iconKey?: string;
+      replacementCategory?: string;
+      orderedIds?: string[];
       plan?: "free" | "pro";
       initialBalances?: Record<string, number>;
     };
@@ -54,20 +62,63 @@ export async function PATCH(request: Request) {
       const exists = db.categories.some(
         (c) => c.type === catType && c.name.toLowerCase() === cleanName.toLowerCase(),
       );
-      if (!exists) {
-        db.categories.push({
-          id: `cat-${randomUUID().slice(0, 8)}`,
-          name: cleanName,
-          type: catType,
-          iconKey: "tag",
-        });
-        writeDb(db);
+      if (exists) {
+        return NextResponse.json(
+          { error: `Kategori "${cleanName}" sudah ada.` },
+          { status: 400 },
+        );
       }
+      const iconKey =
+        body.iconKey && ALLOWED_CATEGORY_ICONS.has(body.iconKey) ? body.iconKey : "tag";
+      db.categories.push({
+        id: `cat-${randomUUID().slice(0, 8)}`,
+        name: cleanName.slice(0, 40),
+        type: catType,
+        iconKey,
+      });
+      writeDb(db);
+      return NextResponse.json(toPublicState(db));
+    }
+
+    if (body.action === "update_category" && body.categoryId) {
+      const result = updateCategoryInDb(db, body.categoryId, {
+        name: body.categoryName,
+        iconKey: body.iconKey,
+      });
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: result.status });
+      }
+      if (result.transactionsChanged) await tryAutoSync(db);
+      writeDb(db);
+      return NextResponse.json(toPublicState(db));
+    }
+
+    if (body.action === "reorder_categories" && Array.isArray(body.orderedIds)) {
+      const catType = body.categoryType === "Masuk" ? "Masuk" : "Keluar";
+      const result = reorderCategoriesInDb(db, catType, body.orderedIds);
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: result.status });
+      }
+      writeDb(db);
       return NextResponse.json(toPublicState(db));
     }
 
     if (body.action === "delete_category" && body.categoryId) {
-      db.categories = db.categories.filter((c) => c.id !== body.categoryId);
+      const result = deleteCategoryInDb(db, body.categoryId, body.replacementCategory);
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: result.status });
+      }
+      if (result.transactionsChanged) await tryAutoSync(db);
+      writeDb(db);
+      return NextResponse.json(toPublicState(db));
+    }
+
+    if (body.action === "reorder_categories" && Array.isArray(body.orderedIds)) {
+      const catType = body.categoryType === "Masuk" ? "Masuk" : "Keluar";
+      const result = reorderCategoriesInDb(db, catType, body.orderedIds);
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: result.status });
+      }
       writeDb(db);
       return NextResponse.json(toPublicState(db));
     }

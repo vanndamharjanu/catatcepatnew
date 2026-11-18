@@ -32,8 +32,8 @@ import {
   HomeIcon,
   ListIcon,
   MicIcon,
-  PiggyIcon,
   PlusIcon,
+  SavingsIcon,
   ScaleIcon,
   SheetIcon,
   ThemeIcon,
@@ -177,6 +177,16 @@ export function AppClient({ initialDb }: AppClientProps) {
     [accountBalances],
   );
   const hasNegativeBalance = accountBalances.some((acc) => acc.balance < 0);
+  const categoryUsageCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const tx of db.transactions) {
+      if (tx.type === "Keluar" || tx.type === "Masuk") {
+        const key = `${tx.type}:${tx.category}`;
+        counts[key] = (counts[key] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }, [db.transactions]);
 
   // Mood and helpful message for Guri mascot
   const guriState = useMemo((): { mood: GuriMood; message: string } => {
@@ -390,30 +400,79 @@ export function AppClient({ initialDb }: AppClientProps) {
   };
 
   // Called from TransactionSheet, which shows the thrown error inside the sheet.
-  const handleAddCategory = async (name: string, type: "Masuk" | "Keluar") => {
+  const handleAddCategory = async (name: string, type: "Masuk" | "Keluar", iconKey: string) => {
     setDb(
       await callApi(
         "/api/state",
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "add_category", categoryName: name, categoryType: type }),
+          body: JSON.stringify({
+            action: "add_category",
+            categoryName: name,
+            categoryType: type,
+            iconKey,
+          }),
         },
         "Gagal menambah kategori.",
       ),
     );
   };
 
-  const handleDeleteCategory = async (categoryId: string) => {
+  const handleUpdateCategory = async (
+    categoryId: string,
+    updates: { name?: string; iconKey?: string },
+  ) => {
     setDb(
       await callApi(
         "/api/state",
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "delete_category", categoryId }),
+          body: JSON.stringify({
+            action: "update_category",
+            categoryId,
+            categoryName: updates.name,
+            iconKey: updates.iconKey,
+          }),
+        },
+        "Gagal memperbarui kategori.",
+      ),
+    );
+  };
+
+  const handleDeleteCategory = async (categoryId: string, replacementCategory?: string) => {
+    setDb(
+      await callApi(
+        "/api/state",
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "delete_category",
+            categoryId,
+            replacementCategory,
+          }),
         },
         "Gagal menghapus kategori.",
+      ),
+    );
+  };
+
+  const handleReorderCategories = async (type: "Masuk" | "Keluar", orderedIds: string[]) => {
+    setDb(
+      await callApi(
+        "/api/state",
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "reorder_categories",
+            categoryType: type,
+            orderedIds,
+          }),
+        },
+        "Gagal menyimpan urutan kategori.",
       ),
     );
   };
@@ -590,7 +649,7 @@ export function AppClient({ initialDb }: AppClientProps) {
   const navItems: Array<{ key: NavTab; label: string; icon: React.FC<{ className?: string }> }> = [
     { key: "beranda", label: "Beranda", icon: HomeIcon },
     { key: "riwayat", label: "Riwayat", icon: ListIcon },
-    { key: "tabungan", label: "Tabungan", icon: PiggyIcon },
+    { key: "tabungan", label: "Tabungan", icon: SavingsIcon },
     { key: "statistik", label: "Statistik", icon: ChartIcon },
   ];
 
@@ -731,33 +790,36 @@ export function AppClient({ initialDb }: AppClientProps) {
         </header>
 
         {/* Feedback Toast & Global Error */}
-        <div className="mx-auto max-w-4xl px-4 pt-3 md:px-8">
-          {toast && (
-            <div
-              role="status"
-              className="mb-3 rounded-2xl border border-[var(--border-subtle)] bg-[var(--brand-deep)] px-4 py-2.5 text-xs font-bold text-white shadow-sm"
-            >
-              {toast}
-            </div>
-          )}
-          {globalError && (
-            <div
-              role="alert"
-              className="mb-3 flex items-center justify-between gap-2 rounded-2xl bg-[var(--expense-bg)] px-4 py-2.5 text-xs font-bold text-[var(--expense-text)]"
-            >
-              <span>{globalError}</span>
-              <button
-                type="button"
-                onClick={() => setGlobalError(null)}
-                className="underline"
+        <div className="px-4 pt-3 md:px-8">
+          <div className="mx-auto max-w-4xl">
+            {toast && (
+              <div
+                role="status"
+                className="mb-3 rounded-2xl border border-[var(--border-subtle)] bg-[var(--brand-deep)] px-4 py-2.5 text-xs font-bold text-white shadow-sm"
               >
-                Tutup
-              </button>
-            </div>
-          )}
+                {toast}
+              </div>
+            )}
+            {globalError && (
+              <div
+                role="alert"
+                className="mb-3 flex items-center justify-between gap-2 rounded-2xl bg-[var(--expense-bg)] px-4 py-2.5 text-xs font-bold text-[var(--expense-text)]"
+              >
+                <span>{globalError}</span>
+                <button
+                  type="button"
+                  onClick={() => setGlobalError(null)}
+                  className="underline"
+                >
+                  Tutup
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
-        <main className="mx-auto max-w-4xl space-y-5 px-4 py-2 md:px-8">
+        <main className="px-4 py-2 md:px-8">
+          <div className="mx-auto max-w-4xl space-y-5">
           {/* ================================================= */}
           {/* TAB 1: BERANDA                                    */}
           {/* ================================================= */}
@@ -1610,6 +1672,7 @@ export function AppClient({ initialDb }: AppClientProps) {
               </section>
             </div>
           )}
+          </div>
         </main>
       </div>
 
@@ -1680,6 +1743,7 @@ export function AppClient({ initialDb }: AppClientProps) {
         accounts={db.accounts}
         balances={accountBalanceMap}
         categories={db.categories}
+        categoryTxCounts={categoryUsageCounts}
         onClose={() => {
           setTxSheetOpen(false);
           setEditingTx(null);
@@ -1688,7 +1752,9 @@ export function AppClient({ initialDb }: AppClientProps) {
         onSaveSingle={handleSaveSingle}
         onSaveBatch={handleSaveBatch}
         onAddCategory={handleAddCategory}
+        onUpdateCategory={handleUpdateCategory}
         onDeleteCategory={handleDeleteCategory}
+        onReorderCategories={handleReorderCategories}
       />
 
       <KoreksiSaldoModal

@@ -1,4 +1,5 @@
 import React from "react";
+export { CATEGORY_ICON_OPTIONS } from "@/lib/types";
 
 interface IconProps {
   className?: string;
@@ -30,17 +31,14 @@ export function ListIcon({ className = "w-5 h-5" }: IconProps) {
   );
 }
 
-export function PiggyIcon({ className = "w-5 h-5" }: IconProps) {
+/** Safebox / vault icon for Tabungan & saving goals. */
+export function SavingsIcon({ className = "w-5 h-5" }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M19 11c0-3.3-3-5.5-7-5.5S5 7.7 5 11c0 2.3 1.4 4.2 3.5 5l.5 2.5h2.5v-1.7c.5.1 1 .1 1.5.1s1 0 1.5-.1v1.7H17l.4-2.4c1-.7 1.6-1.7 1.6-2.9h1.5v-2.2H19z"
-        stroke="currentColor"
-        strokeWidth="1.9"
-        strokeLinejoin="round"
-      />
-      <path d="M10 8.5h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <circle cx="15.5" cy="10.8" r="1" fill="currentColor" />
+      <rect x="4" y="4.5" width="16" height="14" rx="2.5" stroke="currentColor" strokeWidth="1.9" />
+      <path d="M7.5 18.5v1.8M16.5 18.5v1.8M7.5 8.5v6" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+      <circle cx="13.2" cy="11.5" r="3" stroke="currentColor" strokeWidth="1.9" />
+      <circle cx="13.2" cy="11.5" r="1" fill="currentColor" />
     </svg>
   );
 }
@@ -194,12 +192,43 @@ export function ScaleIcon({ className = "w-4 h-4" }: IconProps) {
   );
 }
 
+export function GripIcon({ className = "w-4 h-4" }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <circle cx="7" cy="5" r="1.35" />
+      <circle cx="13" cy="5" r="1.35" />
+      <circle cx="7" cy="10" r="1.35" />
+      <circle cx="13" cy="10" r="1.35" />
+      <circle cx="7" cy="15" r="1.35" />
+      <circle cx="13" cy="15" r="1.35" />
+    </svg>
+  );
+}
+
 export function CategoryIcon({ iconKey, className = "w-5 h-5" }: IconProps & { iconKey: string }) {
   switch (iconKey) {
     case "utensils":
       return (
         <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M7 3v7a2.5 2.5 0 0 0 5 0V3M9.5 3v18M17 3v18M17 3c2 2 2 6 0 8" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+        </svg>
+      );
+    case "coffee":
+      return (
+        <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M5 9h10v6a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4V9zM15 10.5h2a2 2 0 0 1 0 4h-2M8 5.5v1.5M12 5.5v1.5" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "basket":
+      return (
+        <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M4.5 10h15l-1.5 8.5h-12L4.5 10zM8 10l4-5 4 5" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round" />
+        </svg>
+      );
+    case "bag":
+      return (
+        <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M5.5 8.5h13l-1 11.5h-11l-1-11.5zM9 8.5V6.5a3 3 0 0 1 6 0v2" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round" />
         </svg>
       );
     case "bus":
@@ -211,17 +240,26 @@ export function CategoryIcon({ iconKey, className = "w-5 h-5" }: IconProps & { i
           <circle cx="15.5" cy="14.2" r="1" fill="currentColor" />
         </svg>
       );
-    case "basket":
+    case "car":
       return (
         <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M4.5 10h15l-1.5 8.5h-12L4.5 10zM8 10l4-5 4 5" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round" />
+          <path d="M5 12l1.8-4.5A2 2 0 0 1 8.7 6.3h6.6a2 2 0 0 1 1.9 1.2L19 12v5.5a1 1 0 0 1-1 1h-1.5a1 1 0 0 1-1-1V16H8.5v1.5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V12zM5 12h14" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round" />
+          <circle cx="8" cy="14" r="0.9" fill="currentColor" />
+          <circle cx="16" cy="14" r="0.9" fill="currentColor" />
         </svg>
       );
-    case "gift":
+    case "fuel":
       return (
         <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <rect x="4.5" y="9" width="15" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.9" />
-          <path d="M12 9v11M4.5 13h15M12 9c-2 0-3.5-1.2-3.5-2.6S10 4 12 6.5c2-2.5 3.5-1.5 3.5-.1S14 9 12 9z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+          <path d="M5.5 19.5V6a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v13.5M4 19.5h12M7.5 7.5h5v4h-5zM14.5 9.5h2a1.5 1.5 0 0 1 1.5 1.5v5a1.5 1.5 0 0 0 3 0V9.5l-2-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "home":
+      return <HomeIcon className={className} />;
+    case "bolt":
+      return (
+        <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M13 3.5L5.5 13h6l-1 7.5L18.5 11h-6l.5-7.5z" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round" />
         </svg>
       );
     case "phone":
@@ -231,6 +269,13 @@ export function CategoryIcon({ iconKey, className = "w-5 h-5" }: IconProps & { i
           <path d="M11 17.5h2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
         </svg>
       );
+    case "wifi":
+      return (
+        <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M4.5 9.5a11 11 0 0 1 15 0M7.5 12.8a6.8 6.8 0 0 1 9 0M10.5 16a2.5 2.5 0 0 1 3 0" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+          <circle cx="12" cy="19" r="1.1" fill="currentColor" />
+        </svg>
+      );
     case "receipt":
       return (
         <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -238,20 +283,10 @@ export function CategoryIcon({ iconKey, className = "w-5 h-5" }: IconProps & { i
           <path d="M9 8.5h6M9 12.5h6" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
         </svg>
       );
-    case "piggy":
-      return <PiggyIcon className={className} />;
-    case "briefcase":
+    case "heart":
       return (
         <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <rect x="3.5" y="7.5" width="17" height="12" rx="2" stroke="currentColor" strokeWidth="1.9" />
-          <path d="M8.5 7.5v-2a1.5 1.5 0 0 1 1.5-1.5h4a1.5 1.5 0 0 1 1.5 1.5v2" stroke="currentColor" strokeWidth="1.9" />
-        </svg>
-      );
-    case "medal":
-      return (
-        <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <circle cx="12" cy="10" r="5" stroke="currentColor" strokeWidth="1.9" />
-          <path d="M9.5 14.5l-1 6 3.5-2 3.5 2-1-6" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round" />
+          <path d="M12 19.5s-7-4.4-7-9.5a4.2 4.2 0 0 1 7-3.1A4.2 4.2 0 0 1 19 10c0 5.1-7 9.5-7 9.5z" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round" />
         </svg>
       );
     case "cap":
@@ -261,20 +296,119 @@ export function CategoryIcon({ iconKey, className = "w-5 h-5" }: IconProps & { i
           <path d="M7 12v4.5c0 1.2 2.2 2.5 5 2.5s5-1.3 5-2.5V12" stroke="currentColor" strokeWidth="1.9" />
         </svg>
       );
+    case "book":
+      return (
+        <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M4.5 5.5A2.5 2.5 0 0 1 7 3h12.5v16.5H7a2.5 2.5 0 0 0-2.5 2.5V5.5zM4.5 19.5A2.5 2.5 0 0 1 7 17h12.5" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round" />
+        </svg>
+      );
+    case "gift":
+      return (
+        <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="4.5" y="9" width="15" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.9" />
+          <path d="M12 9v11M4.5 13h15M12 9c-2 0-3.5-1.2-3.5-2.6S10 4 12 6.5c2-2.5 3.5-1.5 3.5-.1S14 9 12 9z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+        </svg>
+      );
+    case "users":
+      return (
+        <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="9.5" cy="8.5" r="3" stroke="currentColor" strokeWidth="1.9" />
+          <path d="M4 19c0-2.8 2.5-4.5 5.5-4.5S15 16.2 15 19" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+          <path d="M15.5 6a2.5 2.5 0 0 1 0 5M17.5 14.8c1.6.5 2.5 1.8 2.5 4.2" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+        </svg>
+      );
+    case "shirt":
+      return (
+        <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M8.5 4.5L4.5 7l2 3.5 2-1V19.5h7V9.5l2 1 2-3.5-4-2.5a3.5 3.5 0 0 1-7 0z" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round" />
+        </svg>
+      );
+    case "game":
+      return (
+        <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3.5" y="7.5" width="17" height="10" rx="4.5" stroke="currentColor" strokeWidth="1.9" />
+          <path d="M8.5 10.5v4M6.5 12.5h4" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+          <circle cx="15" cy="11.5" r="1" fill="currentColor" />
+          <circle cx="17.2" cy="13.5" r="1" fill="currentColor" />
+        </svg>
+      );
+    case "film":
+      return (
+        <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="4" y="5" width="16" height="14" rx="2" stroke="currentColor" strokeWidth="1.9" />
+          <path d="M8 5v14M16 5v14M4 9.5h4M4 14.5h4M16 9.5h4M16 14.5h4" stroke="currentColor" strokeWidth="1.8" />
+        </svg>
+      );
+    case "plane":
+      return (
+        <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M3.5 13.5l7.5-2V5.5a1.5 1.5 0 0 1 3 0v6l7.5 2v2l-7.5-1v3.8l2 1.2v1.5l-3.5-1-3.5 1v-1.5l2-1.2v-3.8l-7.5 1v-2z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+        </svg>
+      );
+    case "wrench":
+      return (
+        <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M14.7 6.3a4.5 4.5 0 0 0-5.4 5.4L4.5 16.5a1.8 1.8 0 0 0 2.5 2.5l4.8-4.8a4.5 4.5 0 0 0 5.4-5.4l-2.6 2.6-2.5-2.5 2.6-2.6z" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round" />
+        </svg>
+      );
+    case "savings":
+    case "piggy":
+      return <SavingsIcon className={className} />;
+    case "card":
+      return (
+        <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3.5" y="5.5" width="17" height="13" rx="2.2" stroke="currentColor" strokeWidth="1.9" />
+          <path d="M3.5 10h17M7 14.5h4" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+        </svg>
+      );
+    case "bank":
+      return (
+        <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M3.5 9L12 4l8.5 5H3.5zM6 9v7.5M10 9v7.5M14 9v7.5M18 9v7.5M4 19.5h16" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "briefcase":
+      return (
+        <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3.5" y="7.5" width="17" height="12" rx="2" stroke="currentColor" strokeWidth="1.9" />
+          <path d="M8.5 7.5v-2a1.5 1.5 0 0 1 1.5-1.5h4a1.5 1.5 0 0 1 1.5 1.5v2" stroke="currentColor" strokeWidth="1.9" />
+        </svg>
+      );
+    case "laptop":
+      return (
+        <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="5" y="5" width="14" height="10" rx="1.8" stroke="currentColor" strokeWidth="1.9" />
+          <path d="M3 18.5h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      );
+    case "chart":
+      return (
+        <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M4.5 19.5h15M6 15l4-4 3.5 2.5 5-6" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M15.5 7.5h3v3" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "medal":
+      return (
+        <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="10" r="5" stroke="currentColor" strokeWidth="1.9" />
+          <path d="M9.5 14.5l-1 6 3.5-2 3.5 2-1-6" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round" />
+        </svg>
+      );
     case "star":
       return (
         <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M12 4l2.2 4.9 5.3.6-3.9 3.6 1 5.2L12 15.7 7.4 18.3l1-5.2L4.5 9.5l5.3-.6L12 4z" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round" />
         </svg>
       );
-    case "heart":
+    case "tag":
       return (
         <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M12 19.5s-7-4.4-7-9.5a4.2 4.2 0 0 1 7-3.1A4.2 4.2 0 0 1 19 10c0 5.1-7 9.5-7 9.5z" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round" />
+          <path d="M4 11.5V5.5A1.5 1.5 0 0 1 5.5 4h6l8 8a1.8 1.8 0 0 1 0 2.5l-5 5a1.8 1.8 0 0 1-2.5 0l-8-8z" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round" />
+          <circle cx="8.2" cy="8.2" r="1.2" fill="currentColor" />
         </svg>
       );
     case "wallet":
-    case "bag":
     default:
       return (
         <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">

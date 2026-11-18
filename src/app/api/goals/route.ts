@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { syncTransactionsToSheet } from "@/lib/google-sheets";
+import { tryAutoSync } from "@/lib/google-sheets";
 import { toIsoDate } from "@/lib/finance";
 import { readDb, toPublicState, writeDb } from "@/lib/store";
 
@@ -49,17 +49,7 @@ export async function POST(request: Request) {
         updatedAt: nowIso,
       });
 
-      if (db.sheetConnection.connected) {
-        try {
-          await syncTransactionsToSheet(db.sheetConnection, db.transactions, db.accounts);
-          db.transactions = db.transactions.map((t) => ({ ...t, sheetSyncStatus: "synced" }));
-          db.sheetConnection.lastSyncedAt = new Date().toISOString();
-        } catch (err) {
-          db.sheetConnection.lastError =
-            err instanceof Error ? err.message : "Gagal sinkron setoran ke Sheets";
-        }
-      }
-
+      await tryAutoSync(db);
       writeDb(db);
       return NextResponse.json(toPublicState(db), { status: 201 });
     }
@@ -103,14 +93,8 @@ export async function DELETE(request: Request) {
   // Deleting a goal cancels its deposits so the money returns to the source account balance.
   const before = db.transactions.length;
   db.transactions = db.transactions.filter((t) => t.goalId !== id);
-  if (db.transactions.length !== before && db.sheetConnection.connected) {
-    try {
-      await syncTransactionsToSheet(db.sheetConnection, db.transactions, db.accounts);
-      db.sheetConnection.lastSyncedAt = new Date().toISOString();
-    } catch (err) {
-      db.sheetConnection.lastError =
-        err instanceof Error ? err.message : "Gagal sinkron penghapusan target ke Sheets";
-    }
+  if (db.transactions.length !== before) {
+    await tryAutoSync(db);
   }
   writeDb(db);
   return NextResponse.json(toPublicState(db));

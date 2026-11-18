@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import type { AppDatabase, CategoryItem, Transaction } from "./types.ts";
+import { CATEGORY_ICON_OPTIONS, type AppDatabase, type CategoryItem, type Transaction } from "./types.ts";
 import { toIsoDate } from "./finance.ts";
 
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -19,7 +19,7 @@ export const PRESET_CATEGORIES: Record<
       { name: "Kado", iconKey: "gift" },
       { name: "Komunikasi", iconKey: "phone" },
       { name: "Pembayaran", iconKey: "receipt" },
-      { name: "Tabungan", iconKey: "piggy" },
+      { name: "Tabungan", iconKey: "savings" },
       { name: "Lain-lain", iconKey: "tag" },
     ],
     masuk: [
@@ -38,7 +38,7 @@ export const PRESET_CATEGORIES: Record<
       { name: "Tagihan", iconKey: "receipt" },
       { name: "Kesehatan", iconKey: "heart" },
       { name: "Komunikasi", iconKey: "phone" },
-      { name: "Tabungan", iconKey: "piggy" },
+      { name: "Tabungan", iconKey: "savings" },
       { name: "Lain-lain", iconKey: "tag" },
     ],
     masuk: [
@@ -56,7 +56,7 @@ export const PRESET_CATEGORIES: Record<
       { name: "Kost & Listrik", iconKey: "receipt" },
       { name: "Kuliah & Buku", iconKey: "cap" },
       { name: "Kuota & Pulsa", iconKey: "phone" },
-      { name: "Tabungan", iconKey: "piggy" },
+      { name: "Tabungan", iconKey: "savings" },
       { name: "Lain-lain", iconKey: "tag" },
     ],
     masuk: [
@@ -73,7 +73,7 @@ export const PRESET_CATEGORIES: Record<
       { name: "Internet & Software", iconKey: "phone" },
       { name: "Operasional Kerja", iconKey: "briefcase" },
       { name: "Pajak & Cicilan", iconKey: "receipt" },
-      { name: "Tabungan", iconKey: "piggy" },
+      { name: "Tabungan", iconKey: "savings" },
       { name: "Lain-lain", iconKey: "tag" },
     ],
     masuk: [
@@ -94,6 +94,139 @@ function buildPresetCategoryList(preset: AppDatabase["settings"]["categoryPreset
 }
 
 export { buildPresetCategoryList };
+
+export const ALLOWED_CATEGORY_ICONS = new Set<string>(CATEGORY_ICON_OPTIONS.map((o) => o.key));
+
+/**
+ * Update a category's name and/or icon; when renamed, propagate to matching transactions
+ * so Riwayat and Statistik stay synchronized.
+ */
+export function updateCategoryInDb(
+  db: AppDatabase,
+  categoryId: string,
+  updates: { name?: string; iconKey?: string },
+): { ok: true; transactionsChanged: boolean } | { ok: false; status: number; error: string } {
+  const cat = db.categories.find((c) => c.id === categoryId);
+  if (!cat) {
+    return { ok: false, status: 404, error: "Kategori tidak ditemukan." };
+  }
+
+  let transactionsChanged = false;
+  if (updates.name !== undefined) {
+    const cleanName = updates.name.trim().slice(0, 40);
+    if (!cleanName) {
+      return { ok: false, status: 400, error: "Nama kategori wajib diisi." };
+    }
+    const duplicate = db.categories.some(
+      (c) =>
+        c.id !== cat.id &&
+        c.type === cat.type &&
+        c.name.toLowerCase() === cleanName.toLowerCase(),
+    );
+    if (duplicate) {
+      return { ok: false, status: 400, error: `Kategori "${cleanName}" sudah ada.` };
+    }
+    if (cleanName !== cat.name) {
+      const oldName = cat.name;
+      const nowIso = new Date().toISOString();
+      cat.name = cleanName;
+      for (const tx of db.transactions) {
+        if (tx.type === cat.type && tx.category === oldName) {
+          tx.category = cleanName;
+          tx.updatedAt = nowIso;
+          if (db.sheetConnection.connected) tx.sheetSyncStatus = "pending";
+          transactionsChanged = true;
+        }
+      }
+    }
+  }
+
+  if (updates.iconKey !== undefined) {
+    if (!ALLOWED_CATEGORY_ICONS.has(updates.iconKey)) {
+      return { ok: false, status: 400, error: "Pilihan ikon tidak valid." };
+    }
+    cat.iconKey = updates.iconKey;
+  }
+
+  return { ok: true, transactionsChanged };
+}
+
+/**
+ * Delete a category; if existing transactions use it, require and reassign them to a
+ * user-selected replacement category of the same type.
+ */
+export function deleteCategoryInDb(
+  db: AppDatabase,
+  categoryId: string,
+  replacementCategory?: string,
+): { ok: true; transactionsChanged: boolean } | { ok: false; status: number; error: string } {
+  const target = db.categories.find((c) => c.id === categoryId);
+  if (!target) {
+    return { ok: false, status: 404, error: "Kategori tidak ditemukan." };
+  }
+
+  const remainingSameType = db.categories.filter(
+    (c) => c.id !== target.id && c.type === target.type,
+  );
+  if (remainingSameType.length === 0) {
+    return { ok: false, status: 400, error: "Minimal harus ada 1 kategori tersisa." };
+  }
+
+  const affected = db.transactions.filter(
+    (tx) => tx.type === target.type && tx.category === target.name,
+  );
+  let transactionsChanged = false;
+  if (affected.length > 0) {
+    const replacement = (replacementCategory || "").trim();
+    const validTarget = remainingSameType.some((c) => c.name === replacement);
+    if (!validTarget) {
+      return {
+        ok: false,
+        status: 400,
+        error: "Pilih kategori tujuan yang valid untuk memindahkan transaksi yang ada.",
+      };
+    }
+    const nowIso = new Date().toISOString();
+    for (const tx of affected) {
+      tx.category = replacement;
+      tx.updatedAt = nowIso;
+      if (db.sheetConnection.connected) tx.sheetSyncStatus = "pending";
+    }
+    transactionsChanged = true;
+  }
+
+  db.categories = db.categories.filter((c) => c.id !== target.id);
+  return { ok: true, transactionsChanged };
+}
+
+/** Reorder categories of one transaction type while preserving all categories of the other type. */
+export function reorderCategoriesInDb(
+  db: AppDatabase,
+  catType: "Masuk" | "Keluar",
+  orderedIds: string[],
+): { ok: true } | { ok: false; status: number; error: string } {
+  const sameType = db.categories.filter((c) => c.type === catType);
+  if (orderedIds.length !== sameType.length) {
+    return { ok: false, status: 400, error: "Daftar urutan kategori tidak lengkap." };
+  }
+  const byId = new Map(sameType.map((c) => [c.id, c]));
+  const reordered: CategoryItem[] = [];
+  const seen = new Set<string>();
+  for (const id of orderedIds) {
+    if (seen.has(id)) {
+      return { ok: false, status: 400, error: "Urutan kategori mengandung duplikat." };
+    }
+    const item = byId.get(id);
+    if (!item) {
+      return { ok: false, status: 400, error: "Kategori dalam urutan tidak valid." };
+    }
+    seen.add(id);
+    reordered.push(item);
+  }
+  const others = db.categories.filter((c) => c.type !== catType);
+  db.categories = catType === "Keluar" ? [...reordered, ...others] : [...others, ...reordered];
+  return { ok: true };
+}
 
 /** Strip encrypted OAuth tokens before sending database state to the client. */
 export function toPublicState(db: AppDatabase): AppDatabase {

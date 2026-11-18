@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import type { Account, SheetConnection, Transaction } from "./types";
+import type { Account, AppDatabase, SheetConnection, Transaction } from "./types";
 
 const OAUTH_SCOPE = [
   "https://www.googleapis.com/auth/drive.file",
@@ -223,4 +223,18 @@ export async function syncTransactionsToSheet(
   }
 
   return { syncedCount: transactions.length };
+}
+
+/** Sync transactions to Google Sheets if connected, recording any error on the connection without failing local writes. */
+export async function tryAutoSync(db: AppDatabase): Promise<void> {
+  if (!db.sheetConnection.connected) return;
+  try {
+    await syncTransactionsToSheet(db.sheetConnection, db.transactions, db.accounts);
+    db.transactions = db.transactions.map((tx) => ({ ...tx, sheetSyncStatus: "synced" }));
+    db.sheetConnection.lastSyncedAt = new Date().toISOString();
+    db.sheetConnection.lastError = undefined;
+  } catch (err) {
+    db.sheetConnection.lastError =
+      err instanceof Error ? err.message : "Gagal sinkronisasi ke Google Sheets";
+  }
 }
