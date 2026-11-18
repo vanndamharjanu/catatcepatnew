@@ -22,8 +22,9 @@ import {
 } from "./Icons";
 import { OctopusMascot } from "./OctopusMascot";
 
-interface TransactionSheetProps {
-  open: boolean;
+export interface TransactionFormProps {
+  active?: boolean;
+  inline?: boolean;
   initialTab?: "manual" | "ai";
   initialType?: TransactionType;
   initialAccountId?: string;
@@ -34,7 +35,7 @@ interface TransactionSheetProps {
   categories: CategoryItem[];
   /** Transaction count per `${type}:${category}` key, used when confirming deletion. */
   categoryTxCounts?: Record<string, number>;
-  onClose: () => void;
+  onSaved?: () => void;
   onSaveSingle: (payload: {
     id?: string;
     date: string;
@@ -70,7 +71,7 @@ const QUICK_AMOUNTS = [
 const AI_EXAMPLES = [
   "Makan siang 25rb pake gopay",
   "Bensin 50rb cash",
-  "Ngopi 20rb cash, parkir 2rb cash, gaji masuk bca 5jt",
+  "Ngopi 20rb cash, parkir 2rb cash",
 ];
 
 interface SpeechRecognitionInstance {
@@ -84,8 +85,10 @@ interface SpeechRecognitionInstance {
   onend: (() => void) | null;
 }
 
-export function TransactionSheet({
-  open,
+/** Shared compact 1-screen transaction form rendered both inline on Catat tab and inside edit modals. */
+export function TransactionForm({
+  active = true,
+  inline = false,
   initialTab = "manual",
   initialType = "Keluar",
   initialAccountId,
@@ -94,14 +97,15 @@ export function TransactionSheet({
   balances,
   categories,
   categoryTxCounts,
-  onClose,
+  onSaved,
   onSaveSingle,
   onSaveBatch,
   onAddCategory,
   onUpdateCategory,
   onDeleteCategory,
   onReorderCategories,
-}: TransactionSheetProps) {
+}: TransactionFormProps) {
+  const idPrefix = inline ? "inline-" : "modal-";
   const [mode, setMode] = useState<"manual" | "ai">(initialTab);
   const [txType, setTxType] = useState<TransactionType>(initialType);
   const [amountRaw, setAmountRaw] = useState<string>("");
@@ -137,7 +141,7 @@ export function TransactionSheet({
 
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const wasOpenRef = useRef(false);
+  const wasActiveRef = useRef(false);
   const prevEditIdRef = useRef<string | null>(null);
   const dragCleanupRef = useRef<(() => void) | null>(null);
   const didDragRef = useRef(false);
@@ -161,16 +165,17 @@ export function TransactionSheet({
     ? categoryTxCounts?.[`${deletingCat.type}:${deletingCat.name}`] ?? 0
     : 0;
 
-  // Initialize fields only when opening or switching editingTx (so category updates don't reset inputs)
+  // Initialize fields when modal opens or editingTx changes
   useEffect(() => {
-    if (!open) {
-      wasOpenRef.current = false;
+    if (!active) {
+      wasActiveRef.current = false;
       prevEditIdRef.current = null;
+      recognitionRef.current?.stop();
       return;
     }
     const currentEditId = editingTx?.id ?? null;
-    if (wasOpenRef.current && prevEditIdRef.current === currentEditId) return;
-    wasOpenRef.current = true;
+    if (wasActiveRef.current && prevEditIdRef.current === currentEditId) return;
+    wasActiveRef.current = true;
     prevEditIdRef.current = currentEditId;
 
     setFormError(null);
@@ -207,7 +212,7 @@ export function TransactionSheet({
       setAiEngine(null);
       setAiWarning(null);
     }
-  }, [open, editingTx, initialTab, initialType, initialAccountId, accounts, categories]);
+  }, [active, editingTx, initialTab, initialType, initialAccountId, accounts, categories]);
 
   // Clear category edit/delete state when switching transaction type
   useEffect(() => {
@@ -219,9 +224,9 @@ export function TransactionSheet({
     setActiveDragId(null);
   }, [txType]);
 
-  // Ensure window pointer listeners are cleaned up on close, unmount, or leaving manage mode
+  // Ensure window pointer listeners are cleaned up on unmount or leaving manage mode
   useEffect(() => {
-    if (!open || !managingCats) {
+    if (!active || !managingCats) {
       dragCleanupRef.current?.();
       dragCleanupRef.current = null;
       setDragIds(null);
@@ -231,9 +236,9 @@ export function TransactionSheet({
       dragCleanupRef.current?.();
       dragCleanupRef.current = null;
     };
-  }, [open, managingCats]);
+  }, [active, managingCats]);
 
-  // Keep selected category aligned when toggling Keluar <-> Masuk
+  // Keep selected category aligned when toggling Keluar <-> Masuk or presets
   useEffect(() => {
     if (txType === "Transfer") return;
     if (!filteredCats.some((c) => c.name === category)) {
@@ -241,24 +246,8 @@ export function TransactionSheet({
     }
   }, [txType, filteredCats, category]);
 
-  // Escape key closes sheet (R-32)
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        recognitionRef.current?.stop();
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
   const numericAmount = parseInt(amountRaw.replace(/\D/g, ""), 10) || 0;
 
-  // When editing, adjust out the original transaction's effect before checking the updated balance.
   let effectiveBalance = balances?.[accountId];
   if (effectiveBalance !== undefined && editingTx) {
     if (editingTx.accountId === accountId) {
@@ -278,7 +267,6 @@ export function TransactionSheet({
     numericAmount > effectiveBalance;
   const sourceAccountName = accounts.find((a) => a.id === accountId)?.name ?? "akun ini";
 
-  // Check if the batch of AI drafts would pull any account balance below zero.
   const aiNegativeAccounts: Array<{ name: string; projected: number }> = [];
   if (balances && aiDrafts.length > 0) {
     const projected: Record<string, number> = { ...balances };
@@ -348,8 +336,7 @@ export function TransactionSheet({
     if (!deletingCat || catBusy) return;
     setCatBusy(true);
     try {
-      const targetName =
-        deletingTxCount > 0 ? replacementCat : undefined;
+      const targetName = deletingTxCount > 0 ? replacementCat : undefined;
       await onDeleteCategory(deletingCat.id, targetName);
       if (category === deletingCat.name) {
         setCategory(targetName || deletingOtherCats[0]?.name || "Lain-lain");
@@ -385,7 +372,6 @@ export function TransactionSheet({
       setActiveDragId(catId);
       setDragIds(state.order);
     } else if (e.pointerType !== "mouse") {
-      // Allow touch press-and-hold on the card body ("cubit terus geser") without blocking quick scroll swipes.
       holdTimer = window.setTimeout(() => {
         holdTimer = null;
         if (state.active) return;
@@ -460,9 +446,7 @@ export function TransactionSheet({
       setCatBusy(true);
       void onReorderRef
         .current(catType, state.order)
-        .then(() => {
-          setFormError(null);
-        })
+        .then(() => setFormError(null))
         .catch((err) => {
           setFormError(err instanceof Error ? err.message : "Gagal menyimpan urutan kategori.");
         })
@@ -509,7 +493,11 @@ export function TransactionSheet({
         amount: numericAmount,
         note,
       });
-      onClose();
+      if (inline && !editingTx) {
+        setAmountRaw("");
+        setNote("");
+      }
+      onSaved?.();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Gagal menyimpan transaksi.");
     } finally {
@@ -571,7 +559,7 @@ export function TransactionSheet({
     const SpeechRec = win.SpeechRecognition || win.webkitSpeechRecognition;
     if (!SpeechRec) {
       setAiError(
-        "Browser ini belum mendukung dikte suara langsung. Silakan ketik transaksi di kolom di bawah atau gunakan Chrome/Edge.",
+        "Browser ini belum mendukung dikte suara. Silakan ketik transaksi di kolom di bawah atau gunakan Chrome/Edge.",
       );
       return;
     }
@@ -591,9 +579,7 @@ export function TransactionSheet({
       setListening(false);
       setAiError("Mikrofon tidak dapat diakses atau izin ditolak.");
     };
-    rec.onend = () => {
-      setListening(false);
-    };
+    rec.onend = () => setListening(false);
     recognitionRef.current = rec;
     setListening(true);
     rec.start();
@@ -610,9 +596,7 @@ export function TransactionSheet({
         void runAiParse({ imageBase64: base64, mimeType: file.type || "image/jpeg" });
       }
     };
-    reader.onerror = () => {
-      setAiError("Gagal membaca file gambar struk.");
-    };
+    reader.onerror = () => setAiError("Gagal membaca file gambar struk.");
     reader.readAsDataURL(file);
     e.target.value = "";
   };
@@ -622,13 +606,819 @@ export function TransactionSheet({
     setSaving(true);
     try {
       await onSaveBatch(aiDrafts);
-      onClose();
+      if (inline) {
+        setAiText("");
+        setAiDrafts([]);
+        setAiWarning(null);
+      }
+      onSaved?.();
     } catch (err) {
       setAiError(err instanceof Error ? err.message : "Gagal menyimpan daftar transaksi.");
     } finally {
       setSaving(false);
     }
   };
+
+  return (
+    <div className="flex h-full flex-col">
+      {inline && (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-2.5">
+          <h2 className="text-sm font-extrabold text-[var(--text-primary)]">
+            Catat Transaksi
+          </h2>
+          <div className="flex rounded-xl bg-[var(--bg-soft)] p-0.5 text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => setMode("manual")}
+              className={`rounded-lg px-2.5 py-1 transition-colors ${
+                mode === "manual"
+                  ? "bg-[var(--brand-primary)] text-white"
+                  : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              }`}
+            >
+              Manual
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("ai")}
+              className={`rounded-lg px-2.5 py-1 transition-colors ${
+                mode === "ai"
+                  ? "bg-[var(--brand-primary)] text-white"
+                  : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              }`}
+            >
+              Suara / Struk
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!inline && !editingTx && (
+        <div className="mb-3 flex rounded-xl bg-[var(--bg-soft)] p-1 text-xs font-bold">
+          <button
+            type="button"
+            onClick={() => setMode("manual")}
+            className={`min-h-[38px] flex-1 rounded-lg transition-colors ${
+              mode === "manual"
+                ? "bg-[var(--brand-primary)] text-white"
+                : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+            }`}
+          >
+            Input Manual
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("ai")}
+            className={`min-h-[38px] flex-1 rounded-lg transition-colors ${
+              mode === "ai"
+                ? "bg-[var(--brand-primary)] text-white"
+                : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+            }`}
+          >
+            Suara / Teks / Struk
+          </button>
+        </div>
+      )}
+
+      {mode === "manual" ? (
+        <form onSubmit={handleSubmitManual} className="flex flex-1 flex-col gap-3">
+          {/* Type toggle */}
+          <div
+            className="grid grid-cols-3 gap-1.5 rounded-xl bg-[var(--bg-soft)] p-1"
+            role="tablist"
+            aria-label="Jenis transaksi"
+          >
+            {(
+              [
+                { key: "Keluar", label: "Keluar", icon: ArrowOutIcon },
+                { key: "Masuk", label: "Masuk", icon: ArrowInIcon },
+                { key: "Transfer", label: "Transfer", icon: TransferIcon },
+              ] as const
+            ).map(({ key, label, icon: Icon }) => {
+              const activeTab = txType === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab}
+                  onClick={() => setTxType(key)}
+                  className={`flex min-h-[38px] items-center justify-center gap-1.5 rounded-lg text-xs font-bold transition-all ${
+                    activeTab
+                      ? "bg-[var(--bg-card)] text-[var(--text-primary)] shadow-xs"
+                      : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                  }`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Compact Date + Account side-by-side */}
+          <div className="grid grid-cols-2 gap-2.5">
+            <div>
+              <div className="mb-1 flex items-center justify-between gap-1">
+                <label
+                  htmlFor={`${idPrefix}tx-date`}
+                  className="text-xs font-bold text-[var(--text-muted)]"
+                >
+                  Tanggal
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setDate(date === yesterdayIso ? todayIso : yesterdayIso)}
+                  className="text-[11px] font-bold text-[var(--brand-primary)] hover:underline dark:text-[#fda4af]"
+                >
+                  {date === yesterdayIso ? "Hari ini" : "Kemarin"}
+                </button>
+              </div>
+              <input
+                id={`${idPrefix}tx-date`}
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="min-h-[42px] w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 text-xs font-bold text-[var(--text-primary)]"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor={`${idPrefix}tx-account`}
+                className="mb-1 block text-xs font-bold text-[var(--text-muted)]"
+              >
+                {txType === "Transfer" ? "Dari Akun" : "Akun"}
+              </label>
+              <select
+                id={`${idPrefix}tx-account`}
+                value={accountId}
+                onChange={(e) => setAccountId(e.target.value)}
+                className="min-h-[42px] w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-xs font-bold text-[var(--text-primary)]"
+              >
+                {accounts.map((acc) => (
+                  <option key={acc.id} value={acc.id}>
+                    {acc.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Category Dropdown OR Transfer Destination */}
+          {txType === "Transfer" ? (
+            <div>
+              <label
+                htmlFor={`${idPrefix}tx-to-account`}
+                className="mb-1 block text-xs font-bold text-[var(--text-muted)]"
+              >
+                Ke Akun Tujuan
+              </label>
+              <select
+                id={`${idPrefix}tx-to-account`}
+                value={toAccountId}
+                onChange={(e) => setToAccountId(e.target.value)}
+                className="min-h-[42px] w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-xs font-bold text-[var(--text-primary)]"
+              >
+                {accounts.map((acc) => (
+                  <option key={acc.id} value={acc.id}>
+                    {acc.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div>
+              <div className="mb-1 flex items-center justify-between">
+                <label
+                  htmlFor={`${idPrefix}tx-category`}
+                  className="text-xs font-bold text-[var(--text-muted)]"
+                >
+                  Kategori
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setManagingCats((v) => !v);
+                    setEditingCatId(null);
+                    setEditCatName("");
+                    setDeletingCatId(null);
+                  }}
+                  className="text-xs font-bold text-[var(--brand-primary)] hover:underline dark:text-[#fda4af]"
+                >
+                  {managingCats ? "Selesai" : "Kelola kategori"}
+                </button>
+              </div>
+
+              <select
+                id={`${idPrefix}tx-category`}
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="min-h-[42px] w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-xs font-bold text-[var(--text-primary)]"
+              >
+                {filteredCats.map((cat) => (
+                  <option key={cat.id} value={cat.name}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+
+              {/* Expandable Full Category Manager */}
+              {managingCats && (
+                <div className="mt-2.5 space-y-3 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-3">
+                  {deletingCat ? (
+                    <div className="space-y-2.5">
+                      <p className="text-xs font-extrabold text-[var(--expense-text)]">
+                        Hapus kategori &ldquo;{deletingCat.name}&rdquo;?
+                      </p>
+                      {deletingTxCount > 0 ? (
+                        <div>
+                          <label
+                            htmlFor={`${idPrefix}replacement-cat-select`}
+                            className="mb-1.5 block text-xs text-[var(--text-primary)]"
+                          >
+                            Dipakai di <strong>{deletingTxCount} catatan</strong>. Pindahkan ke:
+                          </label>
+                          <select
+                            id={`${idPrefix}replacement-cat-select`}
+                            value={replacementCat}
+                            onChange={(e) => setReplacementCat(e.target.value)}
+                            className="min-h-[40px] w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 text-xs font-bold text-[var(--text-primary)]"
+                          >
+                            {deletingOtherCats.map((c) => (
+                              <option key={c.id} value={c.name}>
+                                {c.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-[var(--text-muted)]">
+                          Kategori ini belum dipakai.
+                        </p>
+                      )}
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={catBusy}
+                          onClick={handleConfirmDeleteCategory}
+                          className="min-h-[38px] flex-1 rounded-xl bg-[#BE123C] px-3 text-xs font-bold text-white disabled:opacity-50"
+                        >
+                          {deletingTxCount > 0 ? "Pindahkan & Hapus" : "Ya, Hapus"}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={catBusy}
+                          onClick={() => setDeletingCatId(null)}
+                          className="min-h-[38px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3.5 text-xs font-bold text-[var(--text-primary)]"
+                        >
+                          Batal
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {editingCat ? (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <label
+                              htmlFor={`${idPrefix}edit-cat-name`}
+                              className="text-xs font-bold text-[var(--text-primary)]"
+                            >
+                              Edit Kategori
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingCatId(null);
+                                setEditCatName("");
+                              }}
+                              className="text-xs font-bold text-[var(--brand-primary)] hover:underline dark:text-[#fda4af]"
+                            >
+                              Tambah baru
+                            </button>
+                          </div>
+                          <div className="flex gap-2">
+                            <input
+                              id={`${idPrefix}edit-cat-name`}
+                              type="text"
+                              value={editCatName}
+                              onChange={(e) => setEditCatName(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  void handleRenameCategory();
+                                }
+                              }}
+                              placeholder="Nama kategori"
+                              className="min-h-[40px] flex-1 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 text-xs text-[var(--text-primary)]"
+                            />
+                            <button
+                              type="button"
+                              disabled={
+                                catBusy ||
+                                !editCatName.trim() ||
+                                editCatName.trim() === editingCat.name
+                              }
+                              onClick={handleRenameCategory}
+                              className="rounded-xl bg-[var(--brand-primary)] px-3.5 text-xs font-bold text-white disabled:opacity-50"
+                            >
+                              Simpan
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <label
+                            htmlFor={`${idPrefix}new-cat-name`}
+                            className="mb-1.5 block text-xs font-bold text-[var(--text-primary)]"
+                          >
+                            Tambah Kategori {txType}
+                          </label>
+                          <div className="flex gap-2">
+                            <input
+                              id={`${idPrefix}new-cat-name`}
+                              type="text"
+                              value={newCatName}
+                              onChange={(e) => setNewCatName(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  void handleCreateCategory();
+                                }
+                              }}
+                              placeholder="Nama kategori baru"
+                              className="min-h-[40px] flex-1 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 text-xs text-[var(--text-primary)]"
+                            />
+                            <button
+                              type="button"
+                              disabled={catBusy || !newCatName.trim()}
+                              onClick={handleCreateCategory}
+                              className="rounded-xl bg-[var(--brand-primary)] px-3.5 text-xs font-bold text-white disabled:opacity-50"
+                            >
+                              Tambah
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      <div>
+                        <div className="mb-1.5 flex items-center justify-between text-[11px]">
+                          <span className="font-bold text-[var(--text-muted)]">
+                            {editingCat ? "Ikon baru:" : "Pilih ikon:"}
+                          </span>
+                          <span className="font-bold text-[var(--text-primary)]">
+                            {CATEGORY_ICON_OPTIONS.find(
+                              (o) => o.key === (editingCat ? editingCat.iconKey : newCatIcon),
+                            )?.label ?? "Lain-lain"}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-8">
+                          {CATEGORY_ICON_OPTIONS.map((opt) => {
+                            const activeKey = editingCat ? editingCat.iconKey : newCatIcon;
+                            const isPicked =
+                              activeKey === opt.key ||
+                              (activeKey === "piggy" && opt.key === "savings");
+                            return (
+                              <button
+                                key={opt.key}
+                                type="button"
+                                disabled={catBusy}
+                                title={opt.label}
+                                aria-label={`Pilih ikon ${opt.label}`}
+                                aria-pressed={isPicked}
+                                onClick={async () => {
+                                  if (editingCat) {
+                                    setCatBusy(true);
+                                    try {
+                                      await onUpdateCategory(editingCat.id, { iconKey: opt.key });
+                                      setFormError(null);
+                                    } catch (err) {
+                                      setFormError(
+                                        err instanceof Error ? err.message : "Gagal mengubah ikon.",
+                                      );
+                                    } finally {
+                                      setCatBusy(false);
+                                    }
+                                  } else {
+                                    setNewCatIcon(opt.key);
+                                  }
+                                }}
+                                className={`flex h-9 items-center justify-center rounded-xl border transition-colors ${
+                                  isPicked
+                                    ? "border-[var(--brand-primary)] bg-[var(--brand-primary)] text-white"
+                                    : "border-[var(--border-subtle)] bg-[var(--bg-card)] text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
+                                }`}
+                              >
+                                <CategoryIcon iconKey={opt.key} className="h-4 w-4" />
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2 select-none">
+                        {displayedCats.map((cat) => {
+                          const isEditingTile = editingCatId === cat.id;
+                          const isDeletingTile = deletingCatId === cat.id;
+                          const isDraggingTile = activeDragId === cat.id;
+                          return (
+                            <div
+                              key={cat.id}
+                              data-cat-id={cat.id}
+                              className={`relative transition-transform ${
+                                isDraggingTile ? "z-10 scale-[1.03]" : ""
+                              }`}
+                            >
+                              <button
+                                type="button"
+                                onPointerDown={(e) => startCategoryDrag(e, cat.id, false)}
+                                onClick={() => {
+                                  if (didDragRef.current) {
+                                    didDragRef.current = false;
+                                    return;
+                                  }
+                                  setDeletingCatId(null);
+                                  if (editingCatId === cat.id) {
+                                    setEditingCatId(null);
+                                    setEditCatName("");
+                                  } else {
+                                    setEditingCatId(cat.id);
+                                    setEditCatName(cat.name);
+                                  }
+                                }}
+                                className={`flex h-[74px] w-full cursor-grab flex-col items-center justify-center gap-1 rounded-xl border p-2 text-center active:cursor-grabbing ${
+                                  isDraggingTile
+                                    ? "border-[var(--brand-primary)] bg-[var(--bg-soft)] shadow-md ring-2 ring-[var(--brand-primary)]"
+                                    : isDeletingTile
+                                      ? "border-[#BE123C] bg-[var(--expense-bg)]"
+                                      : isEditingTile
+                                        ? "border-dashed border-[var(--brand-primary)] bg-[var(--bg-soft)]"
+                                        : "border-[var(--border-subtle)] bg-[var(--bg-card)]"
+                                }`}
+                              >
+                                <span
+                                  className={`flex h-7 w-7 items-center justify-center rounded-lg ${
+                                    isEditingTile || isDraggingTile
+                                      ? "bg-[var(--brand-primary)] text-white"
+                                      : "bg-[var(--bg-soft)] text-[var(--brand-primary)] dark:text-[#fda4af]"
+                                  }`}
+                                >
+                                  <CategoryIcon iconKey={cat.iconKey} className="h-3.5 w-3.5" />
+                                </span>
+                                <span className="line-clamp-2 text-[11px] font-bold leading-tight text-[var(--text-primary)]">
+                                  {cat.name}
+                                </span>
+                              </button>
+                              {filteredCats.length > 1 && (
+                                <span
+                                  role="button"
+                                  tabIndex={-1}
+                                  aria-label={`Geser posisi ${cat.name}`}
+                                  onPointerDown={(e) => startCategoryDrag(e, cat.id, true)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{ touchAction: "none" }}
+                                  className="absolute left-0.5 top-0.5 flex h-6 w-5 cursor-grab items-center justify-center rounded-md text-[var(--text-muted)]"
+                                >
+                                  <GripIcon className="h-3.5 w-3.5" />
+                                </span>
+                              )}
+                              {filteredCats.length > 1 && (
+                                <button
+                                  type="button"
+                                  disabled={catBusy}
+                                  aria-label={`Hapus kategori ${cat.name}`}
+                                  onPointerDown={(e) => e.stopPropagation()}
+                                  onClick={() => {
+                                    const others = filteredCats.filter((c) => c.id !== cat.id);
+                                    const preferred =
+                                      others.find((c) => c.name === "Lain-lain")?.name ||
+                                      others[0]?.name ||
+                                      "";
+                                    setEditingCatId(null);
+                                    setDeletingCatId(cat.id);
+                                    setReplacementCat(preferred);
+                                    setFormError(null);
+                                  }}
+                                  className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#BE123C] text-[11px] font-bold text-white shadow-xs disabled:opacity-50"
+                                >
+                                  ×
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Nominal Input + 2x5 Quick Chips */}
+          <div>
+            <label
+              htmlFor={`${idPrefix}tx-amount`}
+              className="mb-1 block text-xs font-bold text-[var(--text-muted)]"
+            >
+              Nominal (Rp)
+            </label>
+            <div className="flex items-center rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3.5 py-2 focus-within:border-[var(--brand-primary)] focus-within:ring-2 focus-within:ring-[var(--brand-ring)]">
+              <span className="mr-2 text-base font-extrabold text-[var(--text-muted)]">Rp</span>
+              <input
+                id={`${idPrefix}tx-amount`}
+                type="text"
+                inputMode="numeric"
+                value={numericAmount > 0 ? numericAmount.toLocaleString("id-ID") : ""}
+                onChange={(e) => {
+                  setAmountRaw(e.target.value.replace(/\D/g, ""));
+                  setFormError(null);
+                }}
+                placeholder="0"
+                className="w-full bg-transparent text-xl font-extrabold text-[var(--text-primary)] tabular-nums outline-none focus:outline-none focus-visible:outline-none"
+              />
+              {numericAmount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setAmountRaw("")}
+                  className="ml-2 rounded-lg bg-[var(--bg-soft)] px-2 py-0.5 text-[11px] font-bold text-[var(--brand-primary)] dark:text-[#fda4af]"
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+
+            <div className="mt-1.5 grid grid-cols-5 gap-1.5">
+              {QUICK_AMOUNTS.map((item) => (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => handleQuickAdd(item.value)}
+                  className="min-h-[36px] rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-1 text-[11px] font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
+                >
+                  {item.label}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setAmountRaw("")}
+                className="min-h-[36px] rounded-lg border border-[var(--border-subtle)] bg-[var(--expense-bg)] px-1 text-[11px] font-bold text-[var(--expense-text)] hover:opacity-90"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+
+          {/* Note */}
+          <div>
+            <label
+              htmlFor={`${idPrefix}tx-note`}
+              className="mb-1 block text-xs font-bold text-[var(--text-muted)]"
+            >
+              Keterangan (opsional)
+            </label>
+            <input
+              id={`${idPrefix}tx-note`}
+              type="text"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Contoh: Makan siang"
+              className="min-h-[40px] w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-sm text-[var(--text-primary)]"
+            />
+          </div>
+
+          {goesNegative && effectiveBalance !== undefined && (
+            <p
+              role="status"
+              className="rounded-xl bg-[#FEF3C7] px-3 py-2 text-[11px] font-semibold text-[#92400E] dark:bg-[#451A03] dark:text-[#FDE68A]"
+            >
+              Saldo {sourceAccountName} akan jadi {formatRupiah(effectiveBalance - numericAmount)}. Atur
+              saldo awal di Sheets &amp; Atur jika belum diisi.
+            </p>
+          )}
+
+          {formError && (
+            <p
+              role="alert"
+              className="rounded-xl bg-[var(--expense-bg)] px-3 py-2 text-xs font-bold text-[var(--expense-text)]"
+            >
+              {formError}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={saving}
+            className="mt-auto min-h-[44px] w-full rounded-xl bg-[var(--brand-primary)] px-4 text-sm font-extrabold text-white hover:bg-[var(--brand-hover)] disabled:opacity-60"
+          >
+            {saving ? "Menyimpan..." : editingTx ? "Simpan Perubahan" : "Simpan Transaksi"}
+          </button>
+        </form>
+      ) : (
+        /* AI / Voice / Multi-Transaction Capture Mode */
+        <div className="flex flex-1 flex-col gap-3">
+          <div className="flex items-center gap-3 rounded-xl bg-[var(--bg-soft)] p-3">
+            <OctopusMascot mood="ai" size={44} className="shrink-0" />
+            <div className="min-w-0">
+              <h3 className="text-xs font-extrabold text-[var(--text-primary)]">
+                Catat Cepat via Suara, Teks, atau Foto Struk
+              </h3>
+              <p className="text-[11px] text-[var(--text-muted)]">
+                Bisa tulis banyak transaksi sekaligus lalu simpan sekali klik.
+              </p>
+            </div>
+          </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handleReceiptSelected}
+            className="hidden"
+          />
+
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              disabled={aiBusy}
+              onClick={() => fileInputRef.current?.click()}
+              className="flex min-h-[42px] items-center justify-center gap-1.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)] disabled:opacity-60"
+            >
+              <CameraIcon className="h-4 w-4 text-[var(--brand-primary)] dark:text-[#fda4af]" />
+              <span>{aiBusy ? "Membaca..." : "Foto Struk"}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleVoiceToggle}
+              className={`flex min-h-[42px] items-center justify-center gap-1.5 rounded-xl px-3 text-xs font-bold text-white transition-colors ${
+                listening
+                  ? "bg-[#BE123C]"
+                  : "bg-[var(--brand-primary)] hover:bg-[var(--brand-hover)]"
+              }`}
+            >
+              <MicIcon className="h-4 w-4" />
+              <span>{listening ? "Stop Rekam" : "Rekam Suara"}</span>
+            </button>
+          </div>
+
+          <div className="flex flex-wrap gap-1.5">
+            {AI_EXAMPLES.map((ex) => (
+              <button
+                key={ex}
+                type="button"
+                onClick={() => setAiText(ex)}
+                className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2 py-1 text-left text-[11px] font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
+              >
+                {ex}
+              </button>
+            ))}
+          </div>
+
+          <div>
+            <label
+              htmlFor={`${idPrefix}ai-text-input`}
+              className="mb-1 block text-xs font-bold text-[var(--text-muted)]"
+            >
+              Teks Transaksi
+            </label>
+            <textarea
+              id={`${idPrefix}ai-text-input`}
+              rows={2}
+              value={aiText}
+              onChange={(e) => setAiText(e.target.value)}
+              placeholder="Contoh: Ngopi 20rb cash, bensin 50rb ovo"
+              className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-2.5 text-sm text-[var(--text-primary)]"
+            />
+          </div>
+
+          {aiError && (
+            <p
+              role="alert"
+              className="rounded-xl bg-[var(--expense-bg)] px-3 py-2 text-xs font-bold text-[var(--expense-text)]"
+            >
+              {aiError}
+            </p>
+          )}
+
+          <button
+            type="button"
+            disabled={aiBusy}
+            onClick={() => runAiParse()}
+            className="min-h-[44px] w-full rounded-xl border-2 border-[var(--brand-primary)] bg-transparent text-xs font-extrabold text-[var(--brand-primary)] hover:bg-[var(--bg-soft)] disabled:opacity-60 dark:text-[#fda4af]"
+          >
+            {aiBusy ? "Memproses..." : "Analisa Catatan"}
+          </button>
+
+          {aiDrafts.length > 0 && (
+            <div className="space-y-2 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-[var(--text-primary)]">
+                  Terdeteksi {aiDrafts.length} transaksi
+                </span>
+                <span className="rounded-lg bg-[var(--bg-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--text-muted)]">
+                  {aiEngine === "gemini" || aiEngine === "gateway" ? "Guri AI" : "Otomatis"}
+                </span>
+              </div>
+
+              {aiWarning && (
+                <p className="rounded-xl bg-[#FEF3C7] px-3 py-2 text-[11px] font-semibold text-[#92400E] dark:bg-[#451A03] dark:text-[#FDE68A]">
+                  {aiWarning}
+                </p>
+              )}
+
+              {aiDrafts.map((draft) => {
+                const accName =
+                  accounts.find((a) => a.id === draft.accountId)?.name || draft.accountId;
+                return (
+                  <div
+                    key={draft.tempId}
+                    className="flex items-center justify-between gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`text-xs font-extrabold ${
+                            draft.type === "Masuk"
+                              ? "text-[var(--income-text)]"
+                              : draft.type === "Keluar"
+                                ? "text-[var(--expense-text)]"
+                                : "text-[var(--text-primary)]"
+                          }`}
+                        >
+                          {draft.type}
+                        </span>
+                        <span className="truncate text-xs font-bold text-[var(--text-primary)]">
+                          {draft.category}
+                        </span>
+                        <span className="text-[11px] text-[var(--text-muted)]">({accName})</span>
+                      </div>
+                      <p className="truncate text-[11px] text-[var(--text-muted)]">{draft.note}</p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span className="text-xs font-extrabold text-[var(--text-primary)] tabular-nums">
+                        {formatRupiah(draft.amount)}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label={`Hapus draft ${draft.note}`}
+                        onClick={() =>
+                          setAiDrafts((prev) => prev.filter((item) => item.tempId !== draft.tempId))
+                        }
+                        className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--expense-bg)] text-xs font-bold text-[var(--expense-text)]"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {aiNegativeAccounts.length > 0 && (
+                <p
+                  role="status"
+                  className="rounded-xl bg-[#FEF3C7] px-3 py-2 text-[11px] font-semibold text-[#92400E] dark:bg-[#451A03] dark:text-[#FDE68A]"
+                >
+                  Saldo akan minus pada:{" "}
+                  {aiNegativeAccounts.map((a) => `${a.name} (${formatRupiah(a.projected)})`).join(", ")}.
+                </p>
+              )}
+
+              <button
+                type="button"
+                disabled={saving}
+                onClick={handleSaveAllDrafts}
+                className="min-h-[44px] w-full rounded-xl bg-[var(--brand-primary)] text-sm font-extrabold text-white hover:bg-[var(--brand-hover)] disabled:opacity-60"
+              >
+                {saving ? "Menyimpan..." : `Simpan Semua (${aiDrafts.length})`}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface TransactionSheetProps extends Omit<TransactionFormProps, "active" | "inline" | "onSaved"> {
+  open: boolean;
+  onClose: () => void;
+}
+
+/** Modal wrapper around shared TransactionForm used for editing history rows or quick entry from other tabs. */
+export function TransactionSheet({ open, onClose, ...formProps }: TransactionSheetProps) {
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
+
+  if (!open) return null;
 
   return (
     <div
@@ -641,818 +1431,22 @@ export function TransactionSheet({
       }}
     >
       <div className="animate-sheet-up max-h-sheet flex w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] shadow-2xl sm:rounded-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-5 py-4">
-          <div className="flex items-center gap-3">
-            <h2 id="sheet-title" className="text-base font-extrabold text-[var(--text-primary)]">
-              {editingTx ? "Edit Transaksi" : "Tambah Transaksi"}
-            </h2>
-            {!editingTx && (
-              <div className="flex rounded-xl bg-[var(--bg-soft)] p-0.5 text-xs font-bold">
-                <button
-                  type="button"
-                  onClick={() => setMode("manual")}
-                  className={`rounded-lg px-2.5 py-1 transition-colors ${
-                    mode === "manual"
-                      ? "bg-[var(--brand-primary)] text-white"
-                      : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                  }`}
-                >
-                  Manual
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMode("ai")}
-                  className={`rounded-lg px-2.5 py-1 transition-colors ${
-                    mode === "ai"
-                      ? "bg-[var(--brand-primary)] text-white"
-                      : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                  }`}
-                >
-                  Catat AI
-                </button>
-              </div>
-            )}
-          </div>
+        <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-5 py-3.5">
+          <h2 id="sheet-title" className="text-base font-extrabold text-[var(--text-primary)]">
+            {formProps.editingTx ? "Edit Transaksi" : "Catat Transaksi"}
+          </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Tutup jendela transaksi"
-            className="flex h-10 w-10 items-center justify-center rounded-full text-[var(--text-muted)] hover:bg-[var(--bg-soft)] hover:text-[var(--text-primary)]"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--text-muted)] hover:bg-[var(--bg-soft)] hover:text-[var(--text-primary)]"
           >
             <CloseIcon className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Scrollable Body */}
-        <div className="overflow-y-auto px-5 pb-8 pt-4 sm:py-4">
-          {mode === "manual" ? (
-            <form onSubmit={handleSubmitManual} className="space-y-4">
-              {/* Type toggle */}
-              <div
-                className="grid grid-cols-3 gap-1.5 rounded-xl bg-[var(--bg-soft)] p-1"
-                role="tablist"
-                aria-label="Jenis transaksi"
-              >
-                {(
-                  [
-                    { key: "Keluar", label: "Keluar", icon: ArrowOutIcon },
-                    { key: "Masuk", label: "Masuk", icon: ArrowInIcon },
-                    { key: "Transfer", label: "Transfer", icon: TransferIcon },
-                  ] as const
-                ).map(({ key, label, icon: Icon }) => {
-                  const active = txType === key;
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
-                      onClick={() => setTxType(key)}
-                      className={`flex min-h-[42px] items-center justify-center gap-1.5 rounded-xl text-xs font-bold transition-all ${
-                        active
-                          ? "bg-[var(--bg-card)] text-[var(--text-primary)] shadow-xs"
-                          : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                      }`}
-                    >
-                      <Icon className="h-3.5 w-3.5" />
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Big Nominal Input */}
-              <div>
-                <label
-                  htmlFor="tx-amount"
-                  className="mb-1 block text-xs font-bold text-[var(--text-muted)]"
-                >
-                  Nominal (Rupiah)
-                </label>
-                <div className="flex items-center rounded-xl border-2 border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-4 py-3 focus-within:border-[var(--brand-primary)] focus-within:ring-2 focus-within:ring-[var(--brand-ring)]">
-                  <span className="mr-2 text-lg font-extrabold text-[var(--text-muted)]">Rp</span>
-                  <input
-                    id="tx-amount"
-                    type="text"
-                    inputMode="numeric"
-                    value={numericAmount > 0 ? numericAmount.toLocaleString("id-ID") : ""}
-                    onChange={(e) => {
-                      setAmountRaw(e.target.value.replace(/\D/g, ""));
-                      setFormError(null);
-                    }}
-                    placeholder="0"
-                    className="w-full bg-transparent text-2xl font-extrabold text-[var(--text-primary)] tabular-nums outline-none focus:outline-none focus-visible:outline-none"
-                  />
-                  {numericAmount > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setAmountRaw("")}
-                      className="ml-2 rounded-lg bg-[var(--bg-soft)] px-2 py-1 text-xs font-bold text-[var(--brand-primary)] dark:text-[#fda4af]"
-                    >
-                      Reset
-                    </button>
-                  )}
-                </div>
-
-                <div className="mt-2 grid grid-cols-5 gap-1.5">
-                  {QUICK_AMOUNTS.map((item) => (
-                    <button
-                      key={item.value}
-                      type="button"
-                      onClick={() => handleQuickAdd(item.value)}
-                      className="min-h-[40px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-1 text-[11px] font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)] sm:text-xs"
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => setAmountRaw("")}
-                    className="min-h-[40px] rounded-xl border border-[var(--border-subtle)] bg-[var(--expense-bg)] px-1 text-[11px] font-bold text-[var(--expense-text)] hover:opacity-90 sm:text-xs"
-                  >
-                    Clear
-                  </button>
-                </div>
-              </div>
-
-              {/* Receipt shortcut inside manual mode (only for new expenses) */}
-              {!editingTx && txType === "Keluar" && (
-                <button
-                  type="button"
-                  onClick={() => setMode("ai")}
-                  className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--brand-primary)]/50 bg-[var(--bg-soft)]/60 px-4 py-2.5 text-xs font-bold text-[var(--brand-primary)] hover:bg-[var(--bg-soft)] dark:text-[#fda4af]"
-                >
-                  <CameraIcon className="h-4 w-4" />
-                  Gunakan AI Teks, Suara, atau Scan Struk
-                </button>
-              )}
-
-              {/* Category Visual Icon Grid */}
-              {txType !== "Transfer" && (
-                <div>
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="text-xs font-bold text-[var(--text-muted)]">Kategori</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setManagingCats((v) => !v);
-                        setEditingCatId(null);
-                        setEditCatName("");
-                        setDeletingCatId(null);
-                      }}
-                      className="text-xs font-bold text-[var(--brand-primary)] underline-offset-2 hover:underline dark:text-[#fda4af]"
-                    >
-                      {managingCats ? "Selesai kelola" : "Kelola kategori"}
-                    </button>
-                  </div>
-
-                  {managingCats && (
-                    <div className="mb-3 space-y-3 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-3">
-                      {deletingCat ? (
-                        <div className="space-y-2.5">
-                          <p className="text-xs font-extrabold text-[var(--expense-text)]">
-                            Hapus kategori &ldquo;{deletingCat.name}&rdquo;?
-                          </p>
-                          {deletingTxCount > 0 ? (
-                            <div>
-                              <label
-                                htmlFor="replacement-cat-select"
-                                className="mb-1.5 block text-xs text-[var(--text-primary)]"
-                              >
-                                Kategori ini dipakai di <strong>{deletingTxCount} transaksi</strong>.
-                                Pilih kategori pengganti untuk memindahkan transaksi tersebut:
-                              </label>
-                              <select
-                                id="replacement-cat-select"
-                                value={replacementCat}
-                                onChange={(e) => setReplacementCat(e.target.value)}
-                                className="min-h-[40px] w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 text-xs font-bold text-[var(--text-primary)]"
-                              >
-                                {deletingOtherCats.map((c) => (
-                                  <option key={c.id} value={c.name}>
-                                    {c.name}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          ) : (
-                            <p className="text-xs text-[var(--text-muted)]">
-                              Kategori ini belum dipakai di transaksi mana pun.
-                            </p>
-                          )}
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              disabled={catBusy}
-                              onClick={handleConfirmDeleteCategory}
-                              className="min-h-[38px] flex-1 rounded-xl bg-[#BE123C] px-3 text-xs font-bold text-white disabled:opacity-50"
-                            >
-                              {deletingTxCount > 0 ? "Pindahkan & Hapus" : "Ya, Hapus"}
-                            </button>
-                            <button
-                              type="button"
-                              disabled={catBusy}
-                              onClick={() => setDeletingCatId(null)}
-                              className="min-h-[38px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3.5 text-xs font-bold text-[var(--text-primary)]"
-                            >
-                              Batal
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          {editingCat ? (
-                            <div className="space-y-2">
-                              <div className="flex items-center justify-between gap-2">
-                                <label
-                                  htmlFor="edit-cat-name"
-                                  className="text-xs font-bold text-[var(--text-primary)]"
-                                >
-                                  Edit Kategori
-                                </label>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setEditingCatId(null);
-                                    setEditCatName("");
-                                  }}
-                                  className="text-xs font-bold text-[var(--brand-primary)] hover:underline dark:text-[#fda4af]"
-                                >
-                                  Tambah kategori baru
-                                </button>
-                              </div>
-                              <div className="flex gap-2">
-                                <input
-                                  id="edit-cat-name"
-                                  type="text"
-                                  value={editCatName}
-                                  onChange={(e) => setEditCatName(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
-                                      e.preventDefault();
-                                      void handleRenameCategory();
-                                    }
-                                  }}
-                                  placeholder="Nama kategori"
-                                  className="min-h-[40px] flex-1 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 text-xs text-[var(--text-primary)]"
-                                />
-                                <button
-                                  type="button"
-                                  disabled={
-                                    catBusy ||
-                                    !editCatName.trim() ||
-                                    editCatName.trim() === editingCat.name
-                                  }
-                                  onClick={handleRenameCategory}
-                                  className="rounded-xl bg-[var(--brand-primary)] px-3.5 text-xs font-bold text-white disabled:opacity-50"
-                                >
-                                  Simpan
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div>
-                              <label
-                                htmlFor="new-cat-name"
-                                className="mb-1.5 block text-xs font-bold text-[var(--text-primary)]"
-                              >
-                                Tambah Kategori {txType}
-                              </label>
-                              <div className="flex gap-2">
-                                <input
-                                  id="new-cat-name"
-                                  type="text"
-                                  value={newCatName}
-                                  onChange={(e) => setNewCatName(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
-                                      e.preventDefault();
-                                      void handleCreateCategory();
-                                    }
-                                  }}
-                                  placeholder="Nama kategori baru"
-                                  className="min-h-[40px] flex-1 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 text-xs text-[var(--text-primary)]"
-                                />
-                                <button
-                                  type="button"
-                                  disabled={catBusy || !newCatName.trim()}
-                                  onClick={handleCreateCategory}
-                                  className="rounded-xl bg-[var(--brand-primary)] px-3.5 text-xs font-bold text-white disabled:opacity-50"
-                                >
-                                  Tambah
-                                </button>
-                              </div>
-                            </div>
-                          )}
-
-                          <div>
-                            <div className="mb-1.5 flex items-center justify-between text-[11px]">
-                              <span className="font-bold text-[var(--text-muted)]">
-                                {editingCat ? "Pilih ikon baru:" : "Pilih ikon kategori:"}
-                              </span>
-                              <span className="font-bold text-[var(--text-primary)]">
-                                {CATEGORY_ICON_OPTIONS.find(
-                                  (o) => o.key === (editingCat ? editingCat.iconKey : newCatIcon),
-                                )?.label ?? "Lain-lain"}
-                              </span>
-                            </div>
-                            <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-8">
-                              {CATEGORY_ICON_OPTIONS.map((opt) => {
-                                const activeKey = editingCat ? editingCat.iconKey : newCatIcon;
-                                const isPicked =
-                                  activeKey === opt.key ||
-                                  (activeKey === "piggy" && opt.key === "savings");
-                                return (
-                                  <button
-                                    key={opt.key}
-                                    type="button"
-                                    disabled={catBusy}
-                                    title={opt.label}
-                                    aria-label={`Pilih ikon ${opt.label}`}
-                                    aria-pressed={isPicked}
-                                    onClick={async () => {
-                                      if (editingCat) {
-                                        setCatBusy(true);
-                                        try {
-                                          await onUpdateCategory(editingCat.id, { iconKey: opt.key });
-                                          setFormError(null);
-                                        } catch (err) {
-                                          setFormError(
-                                            err instanceof Error ? err.message : "Gagal mengubah ikon.",
-                                          );
-                                        } finally {
-                                          setCatBusy(false);
-                                        }
-                                      } else {
-                                        setNewCatIcon(opt.key);
-                                      }
-                                    }}
-                                    className={`flex h-9 items-center justify-center rounded-xl border transition-colors ${
-                                      isPicked
-                                        ? "border-[var(--brand-primary)] bg-[var(--brand-primary)] text-white"
-                                        : "border-[var(--border-subtle)] bg-[var(--bg-card)] text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
-                                    }`}
-                                  >
-                                    <CategoryIcon iconKey={opt.key} className="h-4 w-4" />
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-
-                          {!editingCat && (
-                            <p className="text-[11px] text-[var(--text-muted)]">
-                              Tip: tahan &amp; geser ikon ⋮⋮ (atau seret kartu di PC) untuk atur urutan, ketuk kartu
-                              untuk ubah nama/ikon, atau × untuk hapus.
-                            </p>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
-
-                  <div className={`grid grid-cols-3 gap-2 ${managingCats ? "select-none" : ""}`}>
-                    {displayedCats.map((cat) => {
-                      const selected = category === cat.name;
-                      const isEditingTile = managingCats && editingCatId === cat.id;
-                      const isDeletingTile = managingCats && deletingCatId === cat.id;
-                      const isDraggingTile = activeDragId === cat.id;
-                      return (
-                        <div
-                          key={cat.id}
-                          data-cat-id={cat.id}
-                          className={`relative transition-transform ${
-                            isDraggingTile ? "z-10 scale-[1.03]" : ""
-                          }`}
-                        >
-                          <button
-                            type="button"
-                            onPointerDown={(e) => startCategoryDrag(e, cat.id, false)}
-                            onClick={() => {
-                              if (didDragRef.current) {
-                                didDragRef.current = false;
-                                return;
-                              }
-                              if (managingCats) {
-                                setDeletingCatId(null);
-                                if (editingCatId === cat.id) {
-                                  setEditingCatId(null);
-                                  setEditCatName("");
-                                } else {
-                                  setEditingCatId(cat.id);
-                                  setEditCatName(cat.name);
-                                }
-                              } else {
-                                setCategory(cat.name);
-                              }
-                            }}
-                            className={`flex w-full flex-col items-center justify-center gap-1.5 rounded-2xl border p-2 text-center transition-all ${
-                              managingCats ? "h-[80px] cursor-grab active:cursor-grabbing" : "min-h-[74px]"
-                            } ${
-                              isDraggingTile
-                                ? "border-[var(--brand-primary)] bg-[var(--bg-soft)] shadow-md ring-2 ring-[var(--brand-primary)] text-[var(--brand-primary)] dark:text-[#fda4af]"
-                                : isDeletingTile
-                                  ? "border-[#BE123C] bg-[var(--expense-bg)] text-[var(--expense-text)]"
-                                  : isEditingTile
-                                    ? "border-dashed border-[var(--brand-primary)] bg-[var(--bg-soft)] ring-2 ring-[var(--brand-ring)] text-[var(--brand-primary)] dark:text-[#fda4af]"
-                                    : selected
-                                      ? "border-[var(--brand-primary)] bg-[var(--bg-soft)] text-[var(--brand-primary)] dark:text-[#fda4af]"
-                                      : "border-[var(--border-subtle)] bg-[var(--bg-card)] text-[var(--text-primary)] hover:bg-[var(--bg-soft)]/50"
-                            }`}
-                          >
-                            <span
-                              className={`flex h-8 w-8 items-center justify-center rounded-xl ${
-                                isDeletingTile
-                                  ? "bg-[#BE123C] text-white"
-                                  : selected || isEditingTile || isDraggingTile
-                                    ? "bg-[var(--brand-primary)] text-white"
-                                    : "bg-[var(--bg-soft)] text-[var(--brand-primary)] dark:text-[#fda4af]"
-                              }`}
-                            >
-                              <CategoryIcon iconKey={cat.iconKey} className="h-4 w-4" />
-                            </span>
-                            <span className="line-clamp-2 text-[11px] font-bold leading-tight">
-                              {cat.name}
-                            </span>
-                          </button>
-                          {managingCats && filteredCats.length > 1 && (
-                            <span
-                              role="button"
-                              tabIndex={-1}
-                              aria-label={`Geser posisi kategori ${cat.name}`}
-                              onPointerDown={(e) => startCategoryDrag(e, cat.id, true)}
-                              onClick={(e) => e.stopPropagation()}
-                              style={{ touchAction: "none" }}
-                              className="absolute left-1 top-1 flex h-7 w-6 cursor-grab items-center justify-center rounded-lg text-[var(--text-muted)] hover:bg-[var(--bg-soft)] active:cursor-grabbing"
-                            >
-                              <GripIcon className="h-3.5 w-3.5" />
-                            </span>
-                          )}
-                          {managingCats && filteredCats.length > 1 && (
-                            <button
-                              type="button"
-                              disabled={catBusy}
-                              aria-label={`Hapus kategori ${cat.name}`}
-                              onPointerDown={(e) => e.stopPropagation()}
-                              onClick={() => {
-                                const others = filteredCats.filter((c) => c.id !== cat.id);
-                                const preferred =
-                                  others.find((c) => c.name === "Lain-lain")?.name ||
-                                  others[0]?.name ||
-                                  "";
-                                setEditingCatId(null);
-                                setDeletingCatId(cat.id);
-                                setReplacementCat(preferred);
-                                setFormError(null);
-                              }}
-                              className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full bg-[#BE123C] text-xs font-bold text-white shadow-xs disabled:opacity-50"
-                            >
-                              ×
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Date Quick Pills */}
-              <div>
-                <label
-                  htmlFor="tx-date"
-                  className="mb-1.5 block text-xs font-bold text-[var(--text-muted)]"
-                >
-                  Tanggal
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setDate(todayIso)}
-                    className={`min-h-[42px] rounded-xl border text-xs font-bold ${
-                      date === todayIso
-                        ? "border-[var(--brand-deep)] bg-[var(--brand-deep)] text-white"
-                        : "border-[var(--border-subtle)] bg-[var(--bg-card)] text-[var(--text-primary)]"
-                    }`}
-                  >
-                    Hari ini
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDate(yesterdayIso)}
-                    className={`min-h-[42px] rounded-xl border text-xs font-bold ${
-                      date === yesterdayIso
-                        ? "border-[var(--brand-deep)] bg-[var(--brand-deep)] text-white"
-                        : "border-[var(--border-subtle)] bg-[var(--bg-card)] text-[var(--text-primary)]"
-                    }`}
-                  >
-                    Kemarin
-                  </button>
-                  <input
-                    id="tx-date"
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="min-h-[42px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2 text-xs font-bold text-[var(--text-primary)]"
-                  />
-                </div>
-              </div>
-
-              {/* Account Selection */}
-              <div className="grid gap-3 sm:grid-cols-1">
-                <div>
-                  <span className="mb-1.5 block text-xs font-bold text-[var(--text-muted)]">
-                    {txType === "Transfer" ? "Dari Akun" : "Akun / Sumber Dana"}
-                  </span>
-                  <div className="flex flex-wrap gap-2">
-                    {accounts.map((acc) => {
-                      const active = accountId === acc.id;
-                      return (
-                        <button
-                          key={acc.id}
-                          type="button"
-                          onClick={() => setAccountId(acc.id)}
-                          className={`min-h-[40px] rounded-full border px-3.5 text-xs font-bold ${
-                            active
-                              ? "border-[var(--brand-primary)] bg-[var(--bg-soft)] text-[var(--brand-primary)] dark:text-[#fda4af]"
-                              : "border-[var(--border-subtle)] bg-[var(--bg-card)] text-[var(--text-muted)]"
-                          }`}
-                        >
-                          {acc.name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {txType === "Transfer" && (
-                  <div>
-                    <span className="mb-1.5 block text-xs font-bold text-[var(--text-muted)]">
-                      Ke Akun Tujuan
-                    </span>
-                    <div className="flex flex-wrap gap-2">
-                      {accounts.map((acc) => {
-                        const active = toAccountId === acc.id;
-                        return (
-                          <button
-                            key={acc.id}
-                            type="button"
-                            onClick={() => setToAccountId(acc.id)}
-                            className={`min-h-[40px] rounded-full border px-3.5 text-xs font-bold ${
-                              active
-                                ? "border-[var(--brand-primary)] bg-[var(--bg-soft)] text-[var(--brand-primary)] dark:text-[#fda4af]"
-                                : "border-[var(--border-subtle)] bg-[var(--bg-card)] text-[var(--text-muted)]"
-                            }`}
-                          >
-                            {acc.name}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Note */}
-              <div>
-                <label
-                  htmlFor="tx-note"
-                  className="mb-1 block text-xs font-bold text-[var(--text-muted)]"
-                >
-                  Keterangan (opsional)
-                </label>
-                <input
-                  id="tx-note"
-                  type="text"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="Contoh: Makan siang warteg"
-                  className="min-h-[44px] w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3.5 text-sm text-[var(--text-primary)]"
-                />
-              </div>
-
-              {goesNegative && effectiveBalance !== undefined && (
-                <p
-                  role="status"
-                  className="rounded-xl bg-[#FEF3C7] px-3 py-2 text-xs font-semibold text-[#92400E] dark:bg-[#451A03] dark:text-[#FDE68A]"
-                >
-                  Saldo {sourceAccountName} tercatat {formatRupiah(effectiveBalance)}. Setelah transaksi ini jadi{" "}
-                  {formatRupiah(effectiveBalance - numericAmount)}. Kalau saldo awal akun belum diisi, atur di Sheets &
-                  Atur atau Koreksi Saldo.
-                </p>
-              )}
-
-              {formError && (
-                <p role="alert" className="rounded-xl bg-[var(--expense-bg)] px-3 py-2 text-xs font-bold text-[var(--expense-text)]">
-                  {formError}
-                </p>
-              )}
-
-              <button
-                type="submit"
-                disabled={saving}
-                className="min-h-[48px] w-full rounded-xl bg-[var(--brand-primary)] px-4 text-sm font-extrabold text-white shadow-sm hover:bg-[var(--brand-hover)] disabled:opacity-60"
-              >
-                {saving ? "Menyimpan..." : editingTx ? "Simpan Perubahan" : "Simpan Transaksi"}
-              </button>
-            </form>
-          ) : (
-            /* AI / Voice / Multi-Transaction Capture Mode */
-            <div className="space-y-4">
-              <div className="flex items-center gap-3 rounded-2xl bg-[var(--bg-soft)] p-3.5">
-                <OctopusMascot mood="ai" size={56} className="shrink-0" />
-                <div>
-                  <h3 className="text-sm font-extrabold text-[var(--text-primary)]">
-                    Catat Pakai Suara, Teks, atau Struk
-                  </h3>
-                  <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-                    Tulis atau ucapkan beberapa transaksi sekaligus untuk diperiksa sebelum disimpan.
-                  </p>
-                </div>
-              </div>
-
-              {/* Receipt image upload */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={handleReceiptSelected}
-                className="hidden"
-              />
-              <button
-                type="button"
-                disabled={aiBusy}
-                onClick={() => fileInputRef.current?.click()}
-                className="flex min-h-[44px] w-full items-center justify-between rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-4 py-2.5 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)] disabled:opacity-60"
-              >
-                <span className="flex items-center gap-2">
-                  <CameraIcon className="h-4 w-4 text-[var(--brand-primary)] dark:text-[#fda4af]" />
-                  {aiBusy ? "Membaca struk..." : "Upload atau Foto Struk Belanja"}
-                </span>
-                <span className="text-[11px] text-[var(--text-muted)]">AI Vision</span>
-              </button>
-
-              {/* Voice dictation button */}
-              <button
-                type="button"
-                onClick={handleVoiceToggle}
-                className={`flex min-h-[50px] w-full items-center justify-center gap-2.5 rounded-xl px-4 text-sm font-bold text-white transition-colors ${
-                  listening
-                    ? "bg-[#BE123C]"
-                    : "bg-[var(--brand-primary)] hover:bg-[var(--brand-hover)]"
-                }`}
-              >
-                <MicIcon className="h-5 w-5" />
-                {listening ? "Mendengarkan... Ketuk untuk berhenti" : "Rekam Suara (Bahasa Indonesia)"}
-              </button>
-
-              {/* Examples */}
-              <div>
-                <span className="mb-1.5 block text-xs font-bold text-[var(--text-muted)]">
-                  Contoh kalimat yang bisa dicoba:
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {AI_EXAMPLES.map((ex) => (
-                    <button
-                      key={ex}
-                      type="button"
-                      onClick={() => setAiText(ex)}
-                      className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 py-1.5 text-left text-[11px] font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
-                    >
-                      {ex}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label
-                  htmlFor="ai-text-input"
-                  className="mb-1 block text-xs font-bold text-[var(--text-muted)]"
-                >
-                  Teks Transaksi
-                </label>
-                <textarea
-                  id="ai-text-input"
-                  rows={3}
-                  value={aiText}
-                  onChange={(e) => setAiText(e.target.value)}
-                  placeholder="Contoh: Ngopi 20rb cash, bensin 50rb ovo, transfer 100rb dari cash ke bca"
-                  className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-3 text-sm text-[var(--text-primary)]"
-                />
-              </div>
-
-              {aiError && (
-                <p role="alert" className="rounded-xl bg-[var(--expense-bg)] px-3 py-2 text-xs font-bold text-[var(--expense-text)]">
-                  {aiError}
-                </p>
-              )}
-
-              <button
-                type="button"
-                disabled={aiBusy}
-                onClick={() => runAiParse()}
-                className="min-h-[46px] w-full rounded-xl border-2 border-[var(--brand-primary)] bg-transparent text-sm font-extrabold text-[var(--brand-primary)] hover:bg-[var(--bg-soft)] disabled:opacity-60 dark:text-[#fda4af]"
-              >
-                {aiBusy ? "Memproses transaksi..." : "Analisa Kalimat Menjadi Transaksi"}
-              </button>
-
-              {/* Draft Preview Cards */}
-              {aiDrafts.length > 0 && (
-                <div className="space-y-2.5 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-3.5">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-[var(--text-primary)]">
-                      Hasil Deteksi ({aiDrafts.length} transaksi)
-                    </span>
-                    <span className="rounded-lg bg-[var(--bg-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--text-muted)]">
-                      {aiEngine === "gemini" || aiEngine === "gateway" ? "Guri AI" : "Mode Otomatis"}
-                    </span>
-                  </div>
-
-                  {aiWarning && (
-                    <p className="rounded-xl bg-[#FEF3C7] px-3 py-2 text-[11px] font-semibold text-[#92400E] dark:bg-[#451A03] dark:text-[#FDE68A]">
-                      {aiWarning}
-                    </p>
-                  )}
-
-                  {aiDrafts.map((draft) => {
-                    const accName =
-                      accounts.find((a) => a.id === draft.accountId)?.name || draft.accountId;
-                    return (
-                      <div
-                        key={draft.tempId}
-                        className="flex items-center justify-between gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 py-2.5"
-                      >
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`text-xs font-extrabold ${
-                                draft.type === "Masuk"
-                                  ? "text-[var(--income-text)]"
-                                  : draft.type === "Keluar"
-                                    ? "text-[var(--expense-text)]"
-                                    : "text-[var(--text-primary)]"
-                              }`}
-                            >
-                              {draft.type}
-                            </span>
-                            <span className="truncate text-xs font-bold text-[var(--text-primary)]">
-                              {draft.category}
-                            </span>
-                            <span className="text-[11px] text-[var(--text-muted)]">
-                              ({accName})
-                            </span>
-                          </div>
-                          <p className="truncate text-[11px] text-[var(--text-muted)]">
-                            {draft.note}
-                          </p>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                          <span className="text-xs font-extrabold text-[var(--text-primary)] tabular-nums">
-                            {formatRupiah(draft.amount)}
-                          </span>
-                          <button
-                            type="button"
-                            aria-label={`Hapus draft ${draft.note}`}
-                            onClick={() =>
-                              setAiDrafts((prev) =>
-                                prev.filter((item) => item.tempId !== draft.tempId),
-                              )
-                            }
-                            className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--expense-bg)] text-xs font-bold text-[var(--expense-text)]"
-                          >
-                            ×
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {aiNegativeAccounts.length > 0 && (
-                    <p
-                      role="status"
-                      className="rounded-xl bg-[#FEF3C7] px-3 py-2 text-xs font-semibold text-[#92400E] dark:bg-[#451A03] dark:text-[#FDE68A]"
-                    >
-                      Saldo setelah disimpan akan minus:{" "}
-                      {aiNegativeAccounts.map((a) => `${a.name} (${formatRupiah(a.projected)})`).join(", ")}.
-                      Pastikan saldo awal akun sudah diisi di Sheets & Atur.
-                    </p>
-                  )}
-
-                  <button
-                    type="button"
-                    disabled={saving}
-                    onClick={handleSaveAllDrafts}
-                    className="min-h-[46px] w-full rounded-xl bg-[var(--brand-primary)] text-sm font-extrabold text-white hover:bg-[var(--brand-hover)] disabled:opacity-60"
-                  >
-                    {saving ? "Menyimpan..." : `Simpan Semua (${aiDrafts.length})`}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+        <div className="overflow-y-auto px-5 pb-6 pt-4">
+          <TransactionForm active={open} inline={false} onSaved={onClose} {...formProps} />
         </div>
       </div>
     </div>

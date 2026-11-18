@@ -1,5 +1,20 @@
 export const APP_SLOGAN = "Catat 3 Detik, Rapi di Sheets";
 
+export type ThemeKey = "maroon" | "teal" | "indigo" | "amber" | "coral" | "emerald";
+
+export const THEME_OPTIONS: ReadonlyArray<{
+  key: ThemeKey;
+  label: string;
+  swatch: string;
+}> = [
+  { key: "maroon", label: "Maroon", swatch: "#6E1128" },
+  { key: "teal", label: "Teal", swatch: "#0F766E" },
+  { key: "indigo", label: "Indigo", swatch: "#4338CA" },
+  { key: "amber", label: "Amber", swatch: "#B45309" },
+  { key: "coral", label: "Coral", swatch: "#B91C1C" },
+  { key: "emerald", label: "Emerald", swatch: "#047857" },
+];
+
 export type TransactionType = "Masuk" | "Keluar" | "Transfer" | "Koreksi";
 
 export type AccountKind = "cash" | "bank" | "ewallet";

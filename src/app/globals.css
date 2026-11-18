@@ -1,7 +1,8 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
-:root {
+:root,
+html[data-theme="maroon"] {
   --bg-canvas: #faf6f7;
   --bg-card: #ffffff;
   --bg-soft: #f6e9ed;
@@ -20,7 +21,78 @@
   --nav-bg: rgba(255, 255, 255, 0.96);
 }
 
-html.dark {
+html[data-theme="teal"] {
+  --bg-canvas: #f3faf9;
+  --bg-card: #ffffff;
+  --bg-soft: #e6f5f3;
+  --bg-soft-hover: #d3ede9;
+  --border-subtle: #cde5e1;
+  --text-primary: #0f2422;
+  --text-muted: #435e5b;
+  --brand-primary: #0f766e;
+  --brand-deep: #115e59;
+  --brand-hover: #0d5c56;
+  --brand-ring: rgba(15, 118, 110, 0.35);
+}
+
+html[data-theme="indigo"] {
+  --bg-canvas: #f5f6fc;
+  --bg-card: #ffffff;
+  --bg-soft: #ebedfa;
+  --bg-soft-hover: #dde0f7;
+  --border-subtle: #d8dcf2;
+  --text-primary: #13152e;
+  --text-muted: #4d5173;
+  --brand-primary: #4338ca;
+  --brand-deep: #312e81;
+  --brand-hover: #3730a3;
+  --brand-ring: rgba(67, 56, 202, 0.35);
+}
+
+html[data-theme="amber"] {
+  --bg-canvas: #fcf9f2;
+  --bg-card: #ffffff;
+  --bg-soft: #f9eed9;
+  --bg-soft-hover: #f3e2c2;
+  --border-subtle: #ebdec4;
+  --text-primary: #241908;
+  --text-muted: #665336;
+  --brand-primary: #92400e;
+  --brand-deep: #78350f;
+  --brand-hover: #7c2d12;
+  --brand-ring: rgba(146, 64, 14, 0.35);
+}
+
+html[data-theme="coral"] {
+  --bg-canvas: #fcf6f6;
+  --bg-card: #ffffff;
+  --bg-soft: #fbe9e9;
+  --bg-soft-hover: #f7d7d7;
+  --border-subtle: #f0d7d7;
+  --text-primary: #260d0d;
+  --text-muted: #6b4747;
+  --brand-primary: #b91c1c;
+  --brand-deep: #7f1d1d;
+  --brand-hover: #991b1b;
+  --brand-ring: rgba(185, 28, 28, 0.35);
+}
+
+html[data-theme="emerald"] {
+  --bg-canvas: #f3faf6;
+  --bg-card: #ffffff;
+  --bg-soft: #e5f5ec;
+  --bg-soft-hover: #d1ede0;
+  --border-subtle: #c9e6d8;
+  --text-primary: #0b2419;
+  --text-muted: #3f5e4f;
+  --brand-primary: #047857;
+  --brand-deep: #064e3b;
+  --brand-hover: #065f46;
+  --brand-ring: rgba(4, 120, 87, 0.35);
+}
+
+html.dark,
+html.dark[data-theme="maroon"] {
   --bg-canvas: #160b0f;
   --bg-card: #221117;
   --bg-soft: #311922;
@@ -37,6 +109,81 @@ html.dark {
   --expense-text: #fda4af;
   --expense-bg: rgba(190, 18, 60, 0.22);
   --nav-bg: rgba(34, 17, 23, 0.96);
+}
+
+html.dark[data-theme="teal"] {
+  --bg-canvas: #0b1615;
+  --bg-card: #112220;
+  --bg-soft: #18302e;
+  --bg-soft-hover: #21403d;
+  --border-subtle: #233f3c;
+  --text-primary: #f0faf8;
+  --text-muted: #aac8c4;
+  --brand-primary: #0f766e;
+  --brand-deep: #115e59;
+  --brand-hover: #0d9488;
+  --brand-ring: rgba(45, 212, 191, 0.4);
+  --nav-bg: rgba(17, 34, 32, 0.96);
+}
+
+html.dark[data-theme="indigo"] {
+  --bg-canvas: #0e1020;
+  --bg-card: #171a30;
+  --bg-soft: #212542;
+  --bg-soft-hover: #2a3054;
+  --border-subtle: #2c3154;
+  --text-primary: #f2f4fc;
+  --text-muted: #b6bce0;
+  --brand-primary: #4338ca;
+  --brand-deep: #312e81;
+  --brand-hover: #4f46e5;
+  --brand-ring: rgba(129, 140, 248, 0.4);
+  --nav-bg: rgba(23, 26, 48, 0.96);
+}
+
+html.dark[data-theme="amber"] {
+  --bg-canvas: #171209;
+  --bg-card: #241c10;
+  --bg-soft: #332717;
+  --bg-soft-hover: #42331e;
+  --border-subtle: #42331f;
+  --text-primary: #fcf7ee;
+  --text-muted: #d1bfa3;
+  --brand-primary: #92400e;
+  --brand-deep: #78350f;
+  --brand-hover: #b45309;
+  --brand-ring: rgba(251, 191, 36, 0.4);
+  --nav-bg: rgba(36, 28, 16, 0.96);
+}
+
+html.dark[data-theme="coral"] {
+  --bg-canvas: #1a0c0c;
+  --bg-card: #261313;
+  --bg-soft: #361b1b;
+  --bg-soft-hover: #452323;
+  --border-subtle: #452424;
+  --text-primary: #fdf3f3;
+  --text-muted: #d6b2b2;
+  --brand-primary: #b91c1c;
+  --brand-deep: #7f1d1d;
+  --brand-hover: #dc2626;
+  --brand-ring: rgba(248, 113, 113, 0.4);
+  --nav-bg: rgba(38, 19, 19, 0.96);
+}
+
+html.dark[data-theme="emerald"] {
+  --bg-canvas: #0b1711;
+  --bg-card: #12241b;
+  --bg-soft: #1a3327;
+  --bg-soft-hover: #224233;
+  --border-subtle: #234234;
+  --text-primary: #f0faf4;
+  --text-muted: #add1be;
+  --brand-primary: #047857;
+  --brand-deep: #064e3b;
+  --brand-hover: #059669;
+  --brand-ring: rgba(52, 211, 153, 0.4);
+  --nav-bg: rgba(18, 36, 27, 0.96);
 }
 
 @layer base {
@@ -122,11 +269,13 @@ html.dark select:not([multiple]) {
 }
 
 .hero-maroon-gradient {
-  background: linear-gradient(135deg, #6e1128 0%, #450918 100%);
+  background: var(--brand-primary);
+  background: linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-deep) 100%);
 }
 
 html.dark .hero-maroon-gradient {
-  background: linear-gradient(135deg, #8b1835 0%, #4a0b1c 100%);
+  background: var(--brand-primary);
+  background: linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-deep) 100%);
 }
 
 @keyframes sheetSlideUp {

@@ -13,12 +13,14 @@ import {
 } from "@/lib/finance";
 import {
   APP_SLOGAN,
+  THEME_OPTIONS,
   type AppDatabase,
   type ParsedTransactionDraft,
+  type ThemeKey,
   type Transaction,
   type TransactionType,
 } from "@/lib/types";
-import { AccountCarousel, KoreksiSaldoModal } from "./AccountCarousel";
+import { KoreksiSaldoModal } from "./AccountCarousel";
 import {
   CategoryDonutChart,
   EXPENSE_SEGMENT_COLORS,
@@ -26,14 +28,11 @@ import {
   MonthlyTrendChart,
 } from "./Charts";
 import {
-  ArrowInIcon,
-  ArrowOutIcon,
   ChartIcon,
   CloseIcon,
   EyeIcon,
   HomeIcon,
   ListIcon,
-  MicIcon,
   PlusIcon,
   SavingsIcon,
   ScaleIcon,
@@ -41,10 +40,11 @@ import {
   ThemeIcon,
   TransferIcon,
 } from "./Icons";
-import { GuriHabitatCard, OctopusMascot, type GuriMood } from "./OctopusMascot";
+import { OctopusMascot, type GuriMood } from "./OctopusMascot";
 import { LandingPage } from "./LandingPage";
-import { SheetsDrawer } from "./SheetsDrawer";
-import { TransactionSheet } from "./TransactionSheet";
+import { SheetsDrawer, type SettingsTabKey } from "./SheetsDrawer";
+import { ThemeDots } from "./ThemeDots";
+import { TransactionForm, TransactionSheet } from "./TransactionSheet";
 
 type NavTab = "beranda" | "riwayat" | "tabungan" | "statistik";
 
@@ -58,7 +58,10 @@ export function AppClient({ initialDb }: AppClientProps) {
   const [timeRange, setTimeRange] = useState<TimeRangeKey>("month");
   const [hideNumbers, setHideNumbers] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+  const [themeColor, setThemeColor] = useState<ThemeKey>("maroon");
   const [demoBypass, setDemoBypass] = useState(false);
+  const [sheetPromptDismissed, setSheetPromptDismissed] = useState(false);
+  const [quickSheetBusy, setQuickSheetBusy] = useState(false);
 
   // Modals & sheets
   const [txSheetOpen, setTxSheetOpen] = useState(false);
@@ -69,6 +72,7 @@ export function AppClient({ initialDb }: AppClientProps) {
   const [reconcileOpen, setReconcileOpen] = useState(false);
   const [reconcileAccountId, setReconcileAccountId] = useState<string | undefined>(undefined);
   const [sheetsOpen, setSheetsOpen] = useState(false);
+  const [sheetsInitialTab, setSheetsInitialTab] = useState<SettingsTabKey>("sheets");
   const [formulaModalOpen, setFormulaModalOpen] = useState(false);
 
   // Saving goal modals
@@ -166,12 +170,20 @@ export function AppClient({ initialDb }: AppClientProps) {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  // Initialize persisted theme preference safely
+  // Initialize persisted theme & color preferences safely
   useEffect(() => {
     const saved = localStorage.getItem("catatcepat_dark");
     if (saved === "1") {
       setDarkMode(true);
       document.documentElement.classList.add("dark");
+    }
+    const savedTheme = localStorage.getItem("catatcepat_theme") as ThemeKey | null;
+    if (savedTheme && THEME_OPTIONS.some((t) => t.key === savedTheme)) {
+      setThemeColor(savedTheme);
+      document.documentElement.dataset.theme = savedTheme;
+    }
+    if (localStorage.getItem("catatcepat_sheet_prompt_dismissed") === "1") {
+      setSheetPromptDismissed(true);
     }
     const params = new URLSearchParams(window.location.search);
     const sheetsParam = params.get("sheets");
@@ -232,6 +244,38 @@ export function AppClient({ initialDb }: AppClientProps) {
     });
   };
 
+  const handleChangeTheme = (next: ThemeKey) => {
+    setThemeColor(next);
+    document.documentElement.dataset.theme = next;
+    localStorage.setItem("catatcepat_theme", next);
+  };
+
+  const openSheetsTab = (tab: SettingsTabKey) => {
+    setSheetsInitialTab(tab);
+    setSheetsOpen(true);
+  };
+
+  const handleQuickConnectSheets = async () => {
+    setQuickSheetBusy(true);
+    setGlobalError(null);
+    try {
+      const res = await fetch("/api/sheets/connect");
+      const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
+      if (!res.ok || !data.url) {
+        throw new Error(data.error || "Koneksi Google Sheets belum tersedia.");
+      }
+      window.location.href = data.url;
+    } catch (err) {
+      setGlobalError(err instanceof Error ? err.message : "Gagal menghubungkan Google Sheets.");
+      setQuickSheetBusy(false);
+    }
+  };
+
+  const dismissSheetPrompt = () => {
+    setSheetPromptDismissed(true);
+    localStorage.setItem("catatcepat_sheet_prompt_dismissed", "1");
+  };
+
   // Escape handler for inline dialogs
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -264,6 +308,10 @@ export function AppClient({ initialDb }: AppClientProps) {
   );
   const accountBalanceMap = useMemo(
     () => Object.fromEntries(accountBalances.map((acc) => [acc.id, acc.balance])),
+    [accountBalances],
+  );
+  const totalAssets = useMemo(
+    () => accountBalances.reduce((sum, acc) => sum + acc.balance, 0),
     [accountBalances],
   );
   const hasNegativeBalance = accountBalances.some((acc) => acc.balance < 0);
@@ -738,7 +786,7 @@ export function AppClient({ initialDb }: AppClientProps) {
     .reduce((s, t) => s + t.amount, 0);
 
   const navItems: Array<{ key: NavTab; label: string; icon: React.FC<{ className?: string }> }> = [
-    { key: "beranda", label: "Beranda", icon: HomeIcon },
+    { key: "beranda", label: "Catat", icon: HomeIcon },
     { key: "riwayat", label: "Riwayat", icon: ListIcon },
     { key: "tabungan", label: "Tabungan", icon: SavingsIcon },
     { key: "statistik", label: "Statistik", icon: ChartIcon },
@@ -768,6 +816,8 @@ export function AppClient({ initialDb }: AppClientProps) {
         db={db}
         darkMode={darkMode}
         onToggleDarkMode={toggleDarkMode}
+        themeColor={themeColor}
+        onChangeTheme={handleChangeTheme}
         initialError={globalError}
         onAuthSuccess={(nextDb, msg) => {
           setDb(nextDb);
@@ -776,7 +826,7 @@ export function AppClient({ initialDb }: AppClientProps) {
         }}
         onEnterDemo={() => {
           setDemoBypass(true);
-          showToast("Mode Demo dibuka. Masuk akun kapan saja untuk menyimpan ke Cloud.");
+          showToast("Mode Demo dibuka. Masuk akun kapan saja untuk menyimpan.");
         }}
       />
     );
@@ -830,10 +880,14 @@ export function AppClient({ initialDb }: AppClientProps) {
           })}
         </nav>
 
-        <div className="space-y-2 border-t border-[var(--border-subtle)] pt-4">
+        <div className="space-y-2.5 border-t border-[var(--border-subtle)] pt-4">
+          <div className="flex justify-center">
+            <ThemeDots compact showLabel={false} value={themeColor} onChange={handleChangeTheme} />
+          </div>
+
           <button
             type="button"
-            onClick={() => setSheetsOpen(true)}
+            onClick={() => openSheetsTab("sheets")}
             className="flex min-h-[44px] w-full items-center justify-between rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
           >
             <span className="flex items-center gap-2">
@@ -884,7 +938,7 @@ export function AppClient({ initialDb }: AppClientProps) {
             <div className="flex shrink-0 items-center gap-2">
               <button
                 type="button"
-                onClick={() => setSheetsOpen(true)}
+                onClick={() => openSheetsTab("sheets")}
                 aria-label="Pengaturan Google Sheets dan anggaran"
                 className="flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2.5 text-[11px] font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)] sm:px-3 sm:text-xs"
               >
@@ -911,6 +965,38 @@ export function AppClient({ initialDb }: AppClientProps) {
         {/* Feedback Toast & Global Error */}
         <div className="px-4 pt-3 md:px-8">
           <div className="mx-auto max-w-4xl">
+            {db.auth?.authenticated &&
+              db.sheetConnection.configured &&
+              !db.sheetConnection.connected &&
+              !sheetPromptDismissed && (
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-soft)] px-4 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-extrabold text-[var(--text-primary)]">
+                      Buat Google Sheets pribadi sekarang?
+                    </p>
+                    <p className="text-[11px] text-[var(--text-muted)]">
+                      Sekali klik agar catatan Anda otomatis tersimpan ke Google Drive sendiri.
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={quickSheetBusy}
+                      onClick={handleQuickConnectSheets}
+                      className="min-h-[38px] rounded-xl bg-[var(--brand-primary)] px-3.5 text-xs font-extrabold text-white hover:bg-[var(--brand-hover)] disabled:opacity-60"
+                    >
+                      {quickSheetBusy ? "Membuka..." : "Buat Sheet Sekarang"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={dismissSheetPrompt}
+                      className="min-h-[38px] rounded-xl px-2.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--bg-card)]"
+                    >
+                      Nanti
+                    </button>
+                  </div>
+                </div>
+              )}
             {db.auth?.configured && !db.auth?.authenticated && demoBypass && (
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-soft)] px-4 py-2.5 text-xs font-bold text-[var(--text-primary)]">
                 <span>
@@ -954,272 +1040,256 @@ export function AppClient({ initialDb }: AppClientProps) {
         <main className="px-4 py-2 md:px-8">
           <div className="mx-auto max-w-4xl space-y-5">
           {/* ================================================= */}
-          {/* TAB 1: BERANDA                                    */}
+          {/* TAB 1: CATAT / BERANDA                            */}
           {/* ================================================= */}
           {activeTab === "beranda" && (
             <>
-              {/* Period Filter & Privacy Toggle: one row; chips scroll sideways on narrow phones */}
-              <div className="flex items-center gap-2">
-                <div
-                  className="no-scrollbar flex min-w-0 flex-1 gap-1.5 overflow-x-auto"
-                  role="group"
-                  aria-label="Rentang waktu ringkasan"
-                >
-                  {(
-                    [
-                      { key: "today", label: "Hari ini" },
-                      { key: "week", label: "Minggu ini" },
-                      { key: "month", label: "Bulan ini" },
-                      { key: "year", label: "Tahun ini" },
-                    ] as const
-                  ).map((item) => {
-                    const active = timeRange === item.key;
-                    return (
+              {/* Compact Top Strip: Balance + Daily Safe Allowance + Theme Dots + Hide Toggle */}
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3.5 py-2.5">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 tabular-nums">
+                  <div>
+                    <span className="block text-[11px] font-semibold text-[var(--text-muted)]">
+                      Total Saldo
+                    </span>
+                    <strong className="text-sm font-extrabold text-[var(--text-primary)] sm:text-base">
+                      {displayMoney(totalAssets)}
+                    </strong>
+                  </div>
+                  <div className="h-6 w-px bg-[var(--border-subtle)] hidden sm:block" aria-hidden="true" />
+                  <div>
+                    <span className="flex items-center gap-1.5 text-[11px] font-semibold text-[var(--text-muted)]">
+                      Jatah Hari Ini
                       <button
-                        key={item.key}
                         type="button"
-                        onClick={() => setTimeRange(item.key)}
-                        aria-pressed={active}
-                        className={`min-h-[38px] shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-bold transition-colors sm:px-3.5 ${
-                          active
-                            ? "bg-[var(--brand-deep)] text-white"
-                            : "border border-[var(--border-subtle)] bg-[var(--bg-card)] text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
-                        }`}
+                        onClick={() => setFormulaModalOpen(true)}
+                        className="font-bold text-[var(--brand-primary)] underline dark:text-[#fda4af]"
                       >
-                        {item.label}
+                        Rumus
                       </button>
-                    );
-                  })}
+                    </span>
+                    <strong className="text-sm font-extrabold text-[var(--brand-primary)] dark:text-[#fda4af] sm:text-base">
+                      {displayMoney(allowance.remainingToday)}
+                    </strong>
+                  </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setHideNumbers((v) => !v)}
-                  aria-label={hideNumbers ? "Tampilkan nominal saldo" : "Sembunyikan nominal saldo"}
-                  className="flex min-h-[38px] min-w-[38px] shrink-0 items-center justify-center gap-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-card)] text-xs font-bold text-[var(--text-muted)] hover:text-[var(--text-primary)] sm:px-3"
-                >
-                  <EyeIcon off={hideNumbers} className="h-4 w-4" />
-                  <span className="hidden sm:inline">{hideNumbers ? "Tampilkan" : "Sembunyikan"}</span>
-                </button>
-              </div>
-
-              {/* Swipeable Hero Account Carousel (Total Saldo + Kartu Tiap Rekening) */}
-              <AccountCarousel
-                accounts={accountBalances}
-                periodIncome={metrics.income}
-                periodExpense={metrics.expense}
-                allowance={allowance}
-                streak={streak}
-                guriMood={guriState.mood}
-                hideNumbers={hideNumbers}
-                onToggleHideNumbers={() => setHideNumbers((v) => !v)}
-                onOpenFormula={() => setFormulaModalOpen(true)}
-                onQuickCatatAccount={(accId) => openNewTx("manual", "Keluar", accId)}
-                onOpenReconcile={(accId) => openReconcile(accId)}
-              />
-
-              {/* Quick Action Row */}
-              <div className="grid grid-cols-3 gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => openNewTx("manual", "Keluar")}
-                  className="flex min-h-[48px] items-center justify-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 text-xs font-extrabold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
-                >
-                  <ArrowOutIcon className="h-4 w-4 text-[var(--expense-text)]" />
-                  Keluar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openNewTx("manual", "Masuk")}
-                  className="flex min-h-[48px] items-center justify-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 text-xs font-extrabold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
-                >
-                  <ArrowInIcon className="h-4 w-4 text-[var(--income-text)]" />
-                  Masuk
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openNewTx("ai")}
-                  className="flex min-h-[48px] items-center justify-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 text-xs font-extrabold text-[var(--brand-primary)] hover:bg-[var(--bg-soft)] dark:text-[#fda4af]"
-                >
-                  <MicIcon className="h-4 w-4" />
-                  Catat AI
-                </button>
-              </div>
-
-              {/* Empty State Onboarding Card (Honest R-27/R-38 when ledger is empty) */}
-              {db.transactions.length === 0 && (
-                <section className="rounded-2xl border border-dashed border-[var(--brand-primary)]/45 bg-[var(--bg-card)] p-5 text-center">
-                  <h2 className="text-sm font-extrabold text-[var(--text-primary)]">
-                    Belum ada transaksi tercatat
-                  </h2>
-                  <p className="mx-auto mt-1 max-w-md text-xs text-[var(--text-muted)]">
-                    {db.auth?.authenticated
-                      ? "Catat pengeluaran atau pemasukan pertamamu sekarang."
-                      : "Catat transaksi pertamamu, atau muat contoh simulasi untuk melihat grafiknya."}
-                  </p>
-                  <div className="mt-4 flex flex-wrap justify-center gap-2.5">
-                    <button
-                      type="button"
-                      onClick={() => openNewTx("manual", "Keluar")}
-                      className="min-h-[42px] rounded-xl bg-[var(--brand-primary)] px-4 text-xs font-bold text-white hover:bg-[var(--brand-hover)]"
-                    >
-                      Catat Transaksi Pertama
-                    </button>
-                    {!db.auth?.authenticated && (
-                      <button
-                        type="button"
-                        disabled={busyAction}
-                        onClick={handleLoadSimulation}
-                        className="min-h-[42px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-4 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
-                      >
-                        Muat Data Simulasi (Contoh)
-                      </button>
-                    )}
+                <div className="flex items-center gap-2">
+                  <div className="md:hidden">
+                    <ThemeDots
+                      compact
+                      showLabel={false}
+                      value={themeColor}
+                      onChange={handleChangeTheme}
+                    />
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setHideNumbers((v) => !v)}
+                    aria-label={hideNumbers ? "Tampilkan nominal" : "Sembunyikan nominal"}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                  >
+                    <EyeIcon off={hideNumbers} className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Equal-height Split on Desktop, Immediate 1-Screen Input First on Phone */}
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-stretch">
+                <section className="flex h-full flex-col rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-4 sm:p-5 lg:col-span-7">
+                  <TransactionForm
+                    active={activeTab === "beranda"}
+                    inline
+                    accounts={db.accounts}
+                    balances={accountBalanceMap}
+                    categories={db.categories}
+                    categoryTxCounts={categoryUsageCounts}
+                    onSaveSingle={handleSaveSingle}
+                    onSaveBatch={handleSaveBatch}
+                    onAddCategory={handleAddCategory}
+                    onUpdateCategory={handleUpdateCategory}
+                    onDeleteCategory={handleDeleteCategory}
+                    onReorderCategories={handleReorderCategories}
+                  />
                 </section>
-              )}
 
-              {/* Two-column layout on Tablet+ for Companion + Wallets */}
-              <div className="grid gap-4 lg:grid-cols-2">
-                <GuriHabitatCard
-                  streak={streak}
-                  mood={guriState.mood}
-                  message={guriState.message}
-                  onOpenCatat={() => openNewTx("ai")}
-                />
-
-                {/* Multi-Wallet Balances */}
-                <section className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h2 className="text-sm font-bold text-[var(--text-primary)]">
-                      Saldo per Akun
-                    </h2>
-                    <div className="flex items-center gap-1.5">
-                      {db.transactions.length > 0 ||
-                      accountBalances.some((a) => a.balance !== 0) ? (
-                        <button
-                          type="button"
-                          onClick={() => openReconcile()}
-                          className="flex min-h-[34px] items-center gap-1 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
-                        >
-                          <ScaleIcon className="h-3.5 w-3.5" />
-                          Koreksi
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setSheetsOpen(true)}
-                          className="flex min-h-[34px] items-center rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
-                        >
-                          Saldo Awal
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => openNewTx("manual", "Transfer")}
-                        className="flex min-h-[34px] items-center gap-1 rounded-xl bg-[var(--bg-soft)] px-2.5 text-xs font-bold text-[var(--brand-primary)] dark:text-[#fda4af]"
+                <section className="flex h-full flex-col justify-between gap-4 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-4 sm:p-5 lg:col-span-5">
+                  <div className="space-y-4">
+                    {/* Period Selector & Cashflow Summary */}
+                    <div>
+                      <div
+                        className="no-scrollbar flex gap-1 overflow-x-auto pb-1"
+                        role="group"
+                        aria-label="Rentang waktu ringkasan"
                       >
-                        <TransferIcon className="h-3.5 w-3.5" />
-                        Transfer
-                      </button>
+                        {(
+                          [
+                            { key: "today", label: "Hari ini" },
+                            { key: "week", label: "Minggu" },
+                            { key: "month", label: "Bulan" },
+                            { key: "year", label: "Tahun" },
+                          ] as const
+                        ).map((item) => {
+                          const active = timeRange === item.key;
+                          return (
+                            <button
+                              key={item.key}
+                              type="button"
+                              onClick={() => setTimeRange(item.key)}
+                              aria-pressed={active}
+                              className={`min-h-[34px] shrink-0 whitespace-nowrap rounded-lg px-2.5 text-[11px] font-bold transition-colors ${
+                                active
+                                  ? "bg-[var(--brand-primary)] text-white"
+                                  : "bg-[var(--bg-canvas)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                              }`}
+                            >
+                              {item.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className="mt-2.5 grid grid-cols-2 gap-2 tabular-nums">
+                        <div className="rounded-xl bg-[var(--income-bg)] px-3 py-2.5">
+                          <span className="block text-[11px] font-bold text-[var(--income-text)]">
+                            Pemasukan
+                          </span>
+                          <strong className="mt-0.5 block text-sm font-extrabold text-[var(--income-text)]">
+                            {displayMoney(metrics.income)}
+                          </strong>
+                        </div>
+                        <div className="rounded-xl bg-[var(--expense-bg)] px-3 py-2.5">
+                          <span className="block text-[11px] font-bold text-[var(--expense-text)]">
+                            Pengeluaran
+                          </span>
+                          <strong className="mt-0.5 block text-sm font-extrabold text-[var(--expense-text)]">
+                            {displayMoney(metrics.expense)}
+                          </strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Multi-Wallet Balances */}
+                    <div>
+                      <div className="flex items-center justify-between gap-2">
+                        <h2 className="text-xs font-extrabold text-[var(--text-primary)]">
+                          Saldo per Akun
+                        </h2>
+                        <div className="flex items-center gap-1.5">
+                          {db.transactions.length > 0 ||
+                          accountBalances.some((a) => a.balance !== 0) ? (
+                            <button
+                              type="button"
+                              onClick={() => openReconcile()}
+                              className="flex min-h-[32px] items-center gap-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2 text-[11px] font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
+                            >
+                              <ScaleIcon className="h-3 w-3" />
+                              Koreksi
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => openSheetsTab("atur")}
+                              className="flex min-h-[32px] items-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2 text-[11px] font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
+                            >
+                              Saldo Awal
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => openNewTx("manual", "Transfer")}
+                            className="flex min-h-[32px] items-center gap-1 rounded-lg bg-[var(--bg-soft)] px-2 text-[11px] font-bold text-[var(--brand-primary)] dark:text-[#fda4af]"
+                          >
+                            <TransferIcon className="h-3 w-3" />
+                            Transfer
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="mt-2 space-y-1.5">
+                        {accountBalances.map((acc) => (
+                          <div
+                            key={acc.id}
+                            className="flex items-center justify-between rounded-xl bg-[var(--bg-canvas)] px-3 py-2"
+                          >
+                            <span className="text-xs font-bold text-[var(--text-primary)]">
+                              {acc.name}
+                            </span>
+                            <span
+                              className={`text-xs font-extrabold tabular-nums ${
+                                acc.balance < 0
+                                  ? "text-[var(--expense-text)]"
+                                  : "text-[var(--text-primary)]"
+                              }`}
+                            >
+                              {displayMoney(acc.balance)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {hasNegativeBalance && (
+                        <p className="mt-2 rounded-xl bg-[#FEF3C7] px-3 py-2 text-[11px] font-semibold text-[#92400E] dark:bg-[#451A03] dark:text-[#FDE68A]">
+                          Ada saldo minus.{" "}
+                          <button
+                            type="button"
+                            onClick={() => openSheetsTab("atur")}
+                            className="font-extrabold underline"
+                          >
+                            Isi Saldo Awal
+                          </button>{" "}
+                          atau{" "}
+                          <button
+                            type="button"
+                            onClick={() => openReconcile(accountBalances.find((a) => a.balance < 0)?.id)}
+                            className="font-extrabold underline"
+                          >
+                            Koreksi
+                          </button>
+                          .
+                        </p>
+                      )}
                     </div>
                   </div>
 
-                  <div className="mt-3 space-y-2">
-                    {accountBalances.map((acc) => (
-                      <div
-                        key={acc.id}
-                        className="flex items-center justify-between rounded-xl bg-[var(--bg-canvas)] px-3 py-2.5"
-                      >
-                        <span className="text-xs font-bold text-[var(--text-primary)]">
-                          {acc.name}
-                        </span>
-                        <span
-                          className={`text-xs font-extrabold tabular-nums ${
-                            acc.balance < 0
-                              ? "text-[var(--expense-text)]"
-                              : "text-[var(--text-primary)]"
-                          }`}
-                        >
-                          {displayMoney(acc.balance)}
-                        </span>
+                  {/* Compact Guri Mascot Strip */}
+                  <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-3">
+                    <div className="flex items-center gap-3">
+                      <OctopusMascot
+                        mood={guriState.mood}
+                        accessory={streak.accessory}
+                        size={40}
+                        className="shrink-0"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-extrabold text-[var(--text-primary)]">
+                            Guri si Gurita
+                          </span>
+                          <span className="rounded-full bg-[var(--bg-soft)] px-2 py-0.5 text-[11px] font-bold text-[var(--brand-primary)] dark:text-[#fda4af]">
+                            Streak {streak.streakDays} hari
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">
+                          {guriState.message}
+                        </p>
                       </div>
-                    ))}
-                  </div>
+                    </div>
 
-                  {hasNegativeBalance && (
-                    <p className="mt-2.5 rounded-xl bg-[#FEF3C7] px-3 py-2 text-[11px] font-semibold text-[#92400E] dark:bg-[#451A03] dark:text-[#FDE68A]">
-                      Ada saldo minus karena pengeluaran lebih besar dari saldo tercatat. Kamu bisa atur saldo awal di{" "}
-                      <button
-                        type="button"
-                        onClick={() => setSheetsOpen(true)}
-                        className="font-extrabold underline"
-                      >
-                        Sheets & Atur
-                      </button>{" "}
-                      atau samakan lewat tombol{" "}
-                      <button
-                        type="button"
-                        onClick={() => openReconcile(accountBalances.find((a) => a.balance < 0)?.id)}
-                        className="font-extrabold underline"
-                      >
-                        Koreksi
-                      </button>
-                      .
-                    </p>
-                  )}
+                    {!db.auth?.authenticated && db.transactions.length === 0 && (
+                      <div className="mt-2.5 border-t border-[var(--border-subtle)] pt-2">
+                        <button
+                          type="button"
+                          disabled={busyAction}
+                          onClick={handleLoadSimulation}
+                          className="text-[11px] font-bold text-[var(--brand-primary)] underline dark:text-[#fda4af]"
+                        >
+                          Muat contoh simulasi transaksi
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </section>
               </div>
-
-              {/* Insights Section */}
-              <section>
-                <h2 className="mb-2.5 text-sm font-extrabold text-[var(--text-primary)]">
-                  Insight Periode Ini
-                </h2>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-4 sm:col-span-1">
-                    <span className="text-xs font-semibold text-[var(--text-muted)]">
-                      Pengeluaran terbesar
-                    </span>
-                    <p className="mt-1 truncate text-base font-extrabold text-[var(--text-primary)]">
-                      {metrics.topCategory ? metrics.topCategory.name : "Belum ada"}
-                    </p>
-                    <p className="mt-0.5 text-xs text-[var(--text-muted)] tabular-nums">
-                      {metrics.topCategory
-                        ? `${displayMoney(metrics.topCategory.amount)} (${metrics.topCategory.pct}%)`
-                        : "Catat pengeluaran untuk melihat rincian"}
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-4">
-                    <span className="text-xs font-semibold text-[var(--text-muted)]">
-                      Rata-rata harian
-                    </span>
-                    <p className="mt-1 text-base font-extrabold text-[var(--text-primary)] tabular-nums">
-                      {displayMoney(metrics.dailyAverageExpense)}
-                    </p>
-                    <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-                      Per hari berjalan di periode aktif
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-4">
-                    <span className="text-xs font-semibold text-[var(--text-muted)]">
-                      Vs bulan lalu
-                    </span>
-                    <p className="mt-1 text-base font-extrabold text-[var(--text-primary)] tabular-nums">
-                      {metrics.expenseDeltaPct !== null
-                        ? `${metrics.expenseDeltaPct > 0 ? "+" : ""}${metrics.expenseDeltaPct}%`
-                        : "Belum ada pembanding"}
-                    </p>
-                    <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-                      {metrics.prevExpense !== null
-                        ? `Bulan lalu: ${displayMoney(metrics.prevExpense)}`
-                        : "Perlu data bulan sebelumnya"}
-                    </p>
-                  </div>
-                </div>
-              </section>
             </>
           )}
 
@@ -1698,7 +1768,7 @@ export function AppClient({ initialDb }: AppClientProps) {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setSheetsOpen(true)}
+                    onClick={() => openSheetsTab("atur")}
                     className="min-h-[38px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
                   >
                     Ubah Target
@@ -1918,7 +1988,10 @@ export function AppClient({ initialDb }: AppClientProps) {
 
       <SheetsDrawer
         open={sheetsOpen}
+        initialTab={sheetsInitialTab}
         db={db}
+        themeColor={themeColor}
+        onChangeTheme={handleChangeTheme}
         onClose={() => setSheetsOpen(false)}
         onStateUpdated={setDb}
         onTriggerSync={triggerBackgroundSync}
