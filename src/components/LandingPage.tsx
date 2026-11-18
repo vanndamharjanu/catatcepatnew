@@ -148,8 +148,8 @@ export function LandingPage({
 
   return (
     <div className="min-h-dvh w-full overflow-x-hidden bg-[var(--bg-canvas)] text-[var(--text-primary)]">
-      <header className="sticky top-0 z-30 border-b border-[var(--border-subtle)] bg-[var(--bg-card)]/95 px-4 py-3 backdrop-blur-sm sm:px-8">
-        <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3">
+      <header className="sticky top-0 z-30 border-b border-[var(--border-subtle)] bg-[var(--bg-card)]/95 px-4 py-3 backdrop-blur-sm sm:px-8 lg:px-12">
+        <div className="flex w-full items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--brand-primary)] text-white">
               <OctopusMascot mood="saving" size={34} />
@@ -206,14 +206,14 @@ export function LandingPage({
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-8 lg:py-10">
+      <main className="w-full px-4 py-8 sm:px-8 lg:px-12 lg:py-10">
         <section className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12 lg:gap-8">
           <div className="min-w-0 space-y-5 lg:col-span-7">
             <div className="space-y-3">
-              <h1 className="text-2xl font-extrabold tracking-tight text-[var(--text-primary)] sm:text-4xl sm:leading-tight">
+              <h1 className="max-w-3xl text-2xl font-extrabold tracking-tight text-[var(--text-primary)] sm:text-4xl sm:leading-tight">
                 Tahu sisa jatah belanja hari ini sebelum gaji habis di tengah bulan.
               </h1>
-              <p className="text-sm leading-relaxed text-[var(--text-muted)] sm:text-base">
+              <p className="max-w-2xl text-sm leading-relaxed text-[var(--text-muted)] sm:text-base">
                 Catat pemasukan dan pengeluaran lewat suara, chat, atau foto struk. Jatah aman
                 harian dihitung otomatis dan data tersinkron ke Google Sheets Anda.
               </p>
@@ -635,8 +635,8 @@ export function LandingPage({
         </section>
       </main>
 
-      <footer className="border-t border-[var(--border-subtle)] bg-[var(--bg-card)] px-4 py-6 sm:px-8">
-        <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-4 text-xs text-[var(--text-muted)]">
+      <footer className="border-t border-[var(--border-subtle)] bg-[var(--bg-card)] px-4 py-6 sm:px-8 lg:px-12">
+        <div className="flex w-full flex-wrap items-center justify-between gap-4 text-xs text-[var(--text-muted)]">
           <div>
             <span className="font-extrabold text-[var(--text-primary)]">CatatCepat</span>
             <span className="mx-2">·</span>
