@@ -39,46 +39,62 @@ html.dark {
   --nav-bg: rgba(34, 17, 23, 0.96);
 }
 
-* {
-  box-sizing: border-box;
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  /* R-39 Interaction affordances in base layer */
+  a[href],
+  button:not(:disabled),
+  summary,
+  select:not(:disabled),
+  label[for],
+  [role="button"]:not([aria-disabled="true"]),
+  [role="tab"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  select:disabled,
+  input:disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+
+  /* R-32 High-contrast keyboard focus ring in base layer so inner wrapper inputs can suppress double boxes */
+  :focus-visible {
+    outline: 2.5px solid var(--brand-primary);
+    outline-offset: 2px;
+  }
+
+  html.dark :focus-visible {
+    outline-color: #f47292;
+  }
 }
 
-html,
-body {
-  margin: 0;
-  padding: 0;
-  overflow-x: hidden;
-  background-color: var(--bg-canvas);
-  color: var(--text-primary);
-  transition: background-color 0.2s ease, color 0.2s ease;
+/* Give native selects comfortable right padding so dropdown chevrons never crowd the border */
+select:not([multiple]) {
+  appearance: none;
+  padding-right: 2.5rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23694f56' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.875rem center;
+  background-size: 1rem 1rem;
 }
 
-/* R-39 Interaction affordances in base layer */
-a[href],
-button:not(:disabled),
-summary,
-select:not(:disabled),
-label[for],
-[role="button"]:not([aria-disabled="true"]),
-[role="tab"]:not([aria-disabled="true"]) {
-  cursor: pointer;
-}
-
-button:disabled,
-select:disabled,
-input:disabled,
-[aria-disabled="true"] {
-  cursor: not-allowed;
-}
-
-/* R-32 High-contrast keyboard focus ring across both themes */
-:focus-visible {
-  outline: 2.5px solid var(--brand-primary);
-  outline-offset: 2px;
-}
-
-html.dark :focus-visible {
-  outline-color: #f47292;
+html.dark select:not([multiple]) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23c8b2b8' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 
 .tabular-nums {

@@ -10,11 +10,12 @@ import {
   toIsoDate,
   type TimeRangeKey,
 } from "@/lib/finance";
-import type {
-  AppDatabase,
-  ParsedTransactionDraft,
-  Transaction,
-  TransactionType,
+import {
+  APP_SLOGAN,
+  type AppDatabase,
+  type ParsedTransactionDraft,
+  type Transaction,
+  type TransactionType,
 } from "@/lib/types";
 import { AccountCarousel, KoreksiSaldoModal } from "./AccountCarousel";
 import {
@@ -785,7 +786,7 @@ export function AppClient({ initialDb }: AppClientProps) {
       {/* Desktop Left Navigation Rail (Reflows from mobile bottom dock per antislop-layoutmobile) */}
       <aside className="no-print hidden md:flex md:w-64 md:shrink-0 md:flex-col md:border-r md:border-[var(--border-subtle)] md:bg-[var(--bg-card)] md:p-4">
         <div className="flex items-center gap-2.5 px-2 py-2">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[var(--brand-primary)] text-white">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--brand-primary)] text-white">
             <OctopusMascot mood="saving" size={34} />
           </div>
           <div>
@@ -793,7 +794,7 @@ export function AppClient({ initialDb }: AppClientProps) {
               CatatCepat
             </span>
             <span className="block text-[11px] font-semibold text-[var(--text-muted)]">
-              Sheets-Sync SaaS
+              {APP_SLOGAN}
             </span>
           </div>
         </div>
@@ -801,7 +802,7 @@ export function AppClient({ initialDb }: AppClientProps) {
         <button
           type="button"
           onClick={() => openNewTx("manual", "Keluar")}
-          className="mt-4 flex min-h-[46px] w-full items-center justify-center gap-2 rounded-2xl bg-[var(--brand-primary)] px-4 text-sm font-extrabold text-white shadow-xs hover:bg-[var(--brand-hover)]"
+          className="mt-4 flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand-primary)] px-4 text-sm font-extrabold text-white shadow-xs hover:bg-[var(--brand-hover)]"
         >
           <PlusIcon className="h-4 w-4" />
           Catat Transaksi
@@ -874,7 +875,7 @@ export function AppClient({ initialDb }: AppClientProps) {
                         : "Statistik Keuangan"}
                 </h1>
                 <p className="truncate text-xs text-[var(--text-muted)]">
-                  {db.settings.name}
+                  {activeTab === "beranda" ? APP_SLOGAN : db.settings.name}
                 </p>
               </div>
             </div>
@@ -1017,7 +1018,7 @@ export function AppClient({ initialDb }: AppClientProps) {
                 <button
                   type="button"
                   onClick={() => openNewTx("manual", "Keluar")}
-                  className="flex min-h-[48px] items-center justify-center gap-2 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 text-xs font-extrabold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
+                  className="flex min-h-[48px] items-center justify-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 text-xs font-extrabold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
                 >
                   <ArrowOutIcon className="h-4 w-4 text-[var(--expense-text)]" />
                   Keluar
@@ -1025,7 +1026,7 @@ export function AppClient({ initialDb }: AppClientProps) {
                 <button
                   type="button"
                   onClick={() => openNewTx("manual", "Masuk")}
-                  className="flex min-h-[48px] items-center justify-center gap-2 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 text-xs font-extrabold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
+                  className="flex min-h-[48px] items-center justify-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 text-xs font-extrabold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
                 >
                   <ArrowInIcon className="h-4 w-4 text-[var(--income-text)]" />
                   Masuk
@@ -1033,7 +1034,7 @@ export function AppClient({ initialDb }: AppClientProps) {
                 <button
                   type="button"
                   onClick={() => openNewTx("ai")}
-                  className="flex min-h-[48px] items-center justify-center gap-2 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 text-xs font-extrabold text-[var(--brand-primary)] hover:bg-[var(--bg-soft)] dark:text-[#fda4af]"
+                  className="flex min-h-[48px] items-center justify-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 text-xs font-extrabold text-[var(--brand-primary)] hover:bg-[var(--bg-soft)] dark:text-[#fda4af]"
                 >
                   <MicIcon className="h-4 w-4" />
                   Catat AI
@@ -1047,7 +1048,9 @@ export function AppClient({ initialDb }: AppClientProps) {
                     Belum ada transaksi tercatat
                   </h2>
                   <p className="mx-auto mt-1 max-w-md text-xs text-[var(--text-muted)]">
-                    Mulai dengan mencatat pengeluaran atau pemasukan pertamamu, atau muat data simulasi contoh untuk melihat tampilan grafik dan perhitungan jatah harian.
+                    {db.auth?.authenticated
+                      ? "Catat pengeluaran atau pemasukan pertamamu sekarang."
+                      : "Catat transaksi pertamamu, atau muat contoh simulasi untuk melihat grafiknya."}
                   </p>
                   <div className="mt-4 flex flex-wrap justify-center gap-2.5">
                     <button
@@ -1057,14 +1060,16 @@ export function AppClient({ initialDb }: AppClientProps) {
                     >
                       Catat Transaksi Pertama
                     </button>
-                    <button
-                      type="button"
-                      disabled={busyAction}
-                      onClick={handleLoadSimulation}
-                      className="min-h-[42px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-4 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
-                    >
-                      Muat Data Simulasi (Contoh)
-                    </button>
+                    {!db.auth?.authenticated && (
+                      <button
+                        type="button"
+                        disabled={busyAction}
+                        onClick={handleLoadSimulation}
+                        className="min-h-[42px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-4 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
+                      >
+                        Muat Data Simulasi (Contoh)
+                      </button>
+                    )}
                   </div>
                 </section>
               )}
@@ -1085,14 +1090,25 @@ export function AppClient({ initialDb }: AppClientProps) {
                       Saldo per Akun
                     </h2>
                     <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => openReconcile()}
-                        className="flex min-h-[34px] items-center gap-1 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
-                      >
-                        <ScaleIcon className="h-3.5 w-3.5" />
-                        Koreksi
-                      </button>
+                      {db.transactions.length > 0 ||
+                      accountBalances.some((a) => a.balance !== 0) ? (
+                        <button
+                          type="button"
+                          onClick={() => openReconcile()}
+                          className="flex min-h-[34px] items-center gap-1 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
+                        >
+                          <ScaleIcon className="h-3.5 w-3.5" />
+                          Koreksi
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setSheetsOpen(true)}
+                          className="flex min-h-[34px] items-center rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
+                        >
+                          Saldo Awal
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => openNewTx("manual", "Transfer")}
@@ -1320,14 +1336,17 @@ export function AppClient({ initialDb }: AppClientProps) {
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => openReconcile()}
-                      className="flex min-h-[38px] items-center gap-1.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
-                    >
-                      <ScaleIcon className="h-3.5 w-3.5" />
-                      Koreksi Saldo
-                    </button>
+                    {(db.transactions.length > 0 ||
+                      accountBalances.some((a) => a.balance !== 0)) && (
+                      <button
+                        type="button"
+                        onClick={() => openReconcile()}
+                        className="flex min-h-[38px] items-center gap-1.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
+                      >
+                        <ScaleIcon className="h-3.5 w-3.5" />
+                        Koreksi Saldo
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={handleExportCsv}
@@ -1356,8 +1375,8 @@ export function AppClient({ initialDb }: AppClientProps) {
                   </p>
                   <p className="mt-1 text-xs text-[var(--text-muted)]">
                     {db.transactions.length === 0
-                      ? "Tekan tombol tambah di bawah untuk mencatat transaksi pertama."
-                      : "Coba ubah periode bulan, akun, atau kata kunci pencarian."}
+                      ? "Gunakan tombol + Catat Transaksi untuk mulai mencatat."
+                      : "Coba ubah periode, akun, atau kata kunci."}
                   </p>
                 </div>
               ) : (
@@ -1463,20 +1482,20 @@ export function AppClient({ initialDb }: AppClientProps) {
           {/* ================================================= */}
           {activeTab === "tabungan" && (
             <div className="space-y-4">
-              <section className="hero-maroon-gradient rounded-3xl p-5 text-white shadow-md">
+              <section className="hero-maroon-gradient rounded-2xl p-5 text-white shadow-md">
                 <p className="text-xs font-semibold text-[#F6D8DF]">Total tabungan terkumpul</p>
                 <p className="mt-1 text-3xl font-extrabold tabular-nums">
                   {displayMoney(totalGoalsSaved)}
                 </p>
                 <div className="mt-4 grid grid-cols-2 gap-2.5">
-                  <div className="rounded-2xl bg-white/10 p-3">
+                  <div className="rounded-xl bg-white/10 p-3">
                     <span className="text-xs text-[#F6D8DF]">Target aktif</span>
                     <span className="mt-0.5 block text-base font-extrabold tabular-nums">
                       {db.goals.filter((g) => g.currentAmount < g.targetAmount).length} dari{" "}
                       {db.goals.length}
                     </span>
                   </div>
-                  <div className="rounded-2xl bg-white/10 p-3">
+                  <div className="rounded-xl bg-white/10 p-3">
                     <span className="text-xs text-[#F6D8DF]">Setoran bulan ini</span>
                     <span className="mt-0.5 block text-base font-extrabold tabular-nums">
                       {displayMoney(monthlyGoalDeposits)}
@@ -1490,21 +1509,21 @@ export function AppClient({ initialDb }: AppClientProps) {
                   type="button"
                   disabled={db.goals.length === 0}
                   onClick={() => setDepositModalGoalId(db.goals[0]?.id || null)}
-                  className="min-h-[46px] flex-1 rounded-2xl bg-[var(--brand-primary)] px-4 text-xs font-extrabold text-white hover:bg-[var(--brand-hover)] disabled:opacity-45"
+                  className="min-h-[46px] flex-1 rounded-xl bg-[var(--brand-primary)] px-4 text-xs font-extrabold text-white hover:bg-[var(--brand-hover)] disabled:opacity-45"
                 >
                   Setor Tabungan
                 </button>
                 <button
                   type="button"
                   onClick={() => setGoalModalOpen(true)}
-                  className="min-h-[46px] flex-1 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-4 text-xs font-extrabold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
+                  className="min-h-[46px] flex-1 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-4 text-xs font-extrabold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
                 >
                   Target Baru
                 </button>
               </div>
 
               <p className="text-xs text-[var(--text-muted)]">
-                Setoran tabungan otomatis tercatat ke riwayat sebagai pengeluaran kategori Tabungan agar saldo dompet tetap akurat.
+                Setoran tabungan otomatis tercatat di riwayat agar saldo dompet tetap akurat.
               </p>
 
               {db.goals.length === 0 ? (
@@ -1737,7 +1756,7 @@ export function AppClient({ initialDb }: AppClientProps) {
                       Tanya Guri Tentang Datamu
                     </h2>
                     <p className="text-xs text-[var(--text-muted)]">
-                      Jawaban dihitung langsung dari riwayat transaksi aktual di workspace ini.
+                      Dihitung langsung dari riwayat transaksimu.
                     </p>
                   </div>
                 </div>
@@ -1920,7 +1939,7 @@ export function AppClient({ initialDb }: AppClientProps) {
               if (e.target === e.currentTarget) setFormulaModalOpen(false);
             }}
           >
-            <div className="w-full max-w-md rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5 shadow-2xl">
+            <div className="w-full max-w-md rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5 shadow-2xl">
               <div className="flex items-center justify-between gap-3">
                 <h2 id="formula-title" className="text-base font-extrabold text-[var(--text-primary)]">
                   Cara Hitung Jatah Harian
@@ -2023,7 +2042,7 @@ export function AppClient({ initialDb }: AppClientProps) {
         >
           <form
             onSubmit={handleCreateGoal}
-            className="w-full max-w-md space-y-4 rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5 shadow-2xl"
+            className="w-full max-w-md space-y-4 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5 shadow-2xl"
           >
             <div className="flex items-center justify-between">
               <h2 id="goal-modal-title" className="text-base font-extrabold text-[var(--text-primary)]">
@@ -2083,7 +2102,7 @@ export function AppClient({ initialDb }: AppClientProps) {
             <button
               type="submit"
               disabled={busyAction}
-              className="min-h-[46px] w-full rounded-2xl bg-[var(--brand-primary)] text-sm font-extrabold text-white hover:bg-[var(--brand-hover)]"
+              className="min-h-[46px] w-full rounded-xl bg-[var(--brand-primary)] text-sm font-extrabold text-white hover:bg-[var(--brand-hover)]"
             >
               Simpan Target
             </button>
@@ -2104,7 +2123,7 @@ export function AppClient({ initialDb }: AppClientProps) {
         >
           <form
             onSubmit={handleDepositGoal}
-            className="w-full max-w-md space-y-4 rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5 shadow-2xl"
+            className="w-full max-w-md space-y-4 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5 shadow-2xl"
           >
             <div className="flex items-center justify-between">
               <h2 id="deposit-modal-title" className="text-base font-extrabold text-[var(--text-primary)]">
@@ -2196,7 +2215,7 @@ export function AppClient({ initialDb }: AppClientProps) {
             <button
               type="submit"
               disabled={busyAction}
-              className="min-h-[46px] w-full rounded-2xl bg-[var(--brand-primary)] text-sm font-extrabold text-white hover:bg-[var(--brand-hover)]"
+              className="min-h-[46px] w-full rounded-xl bg-[var(--brand-primary)] text-sm font-extrabold text-white hover:bg-[var(--brand-hover)]"
             >
               Simpan Setoran
             </button>

@@ -640,7 +640,7 @@ export function TransactionSheet({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="animate-sheet-up flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-[var(--border-subtle)] bg-[var(--bg-card)] shadow-2xl sm:rounded-3xl">
+      <div className="animate-sheet-up flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] shadow-2xl sm:rounded-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-5 py-4">
           <div className="flex items-center gap-3">
@@ -690,7 +690,7 @@ export function TransactionSheet({
             <form onSubmit={handleSubmitManual} className="space-y-4">
               {/* Type toggle */}
               <div
-                className="grid grid-cols-3 gap-1.5 rounded-2xl bg-[var(--bg-soft)] p-1"
+                className="grid grid-cols-3 gap-1.5 rounded-xl bg-[var(--bg-soft)] p-1"
                 role="tablist"
                 aria-label="Jenis transaksi"
               >
@@ -730,7 +730,7 @@ export function TransactionSheet({
                 >
                   Nominal (Rupiah)
                 </label>
-                <div className="flex items-center rounded-2xl border-2 border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-4 py-3 focus-within:border-[var(--brand-primary)] focus-within:ring-2 focus-within:ring-[var(--brand-ring)]">
+                <div className="flex items-center rounded-xl border-2 border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-4 py-3 focus-within:border-[var(--brand-primary)] focus-within:ring-2 focus-within:ring-[var(--brand-ring)]">
                   <span className="mr-2 text-lg font-extrabold text-[var(--text-muted)]">Rp</span>
                   <input
                     id="tx-amount"
@@ -742,7 +742,7 @@ export function TransactionSheet({
                       setFormError(null);
                     }}
                     placeholder="0"
-                    className="w-full bg-transparent text-2xl font-extrabold text-[var(--text-primary)] tabular-nums focus:outline-none"
+                    className="w-full bg-transparent text-2xl font-extrabold text-[var(--text-primary)] tabular-nums outline-none focus:outline-none focus-visible:outline-none"
                   />
                   {numericAmount > 0 && (
                     <button
@@ -781,7 +781,7 @@ export function TransactionSheet({
                 <button
                   type="button"
                   onClick={() => setMode("ai")}
-                  className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-[var(--brand-primary)]/50 bg-[var(--bg-soft)]/60 px-4 py-2.5 text-xs font-bold text-[var(--brand-primary)] hover:bg-[var(--bg-soft)] dark:text-[#fda4af]"
+                  className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--brand-primary)]/50 bg-[var(--bg-soft)]/60 px-4 py-2.5 text-xs font-bold text-[var(--brand-primary)] hover:bg-[var(--bg-soft)] dark:text-[#fda4af]"
                 >
                   <CameraIcon className="h-4 w-4" />
                   Gunakan AI Teks, Suara, atau Scan Struk
@@ -1252,7 +1252,7 @@ export function TransactionSheet({
               <button
                 type="submit"
                 disabled={saving}
-                className="min-h-[48px] w-full rounded-2xl bg-[var(--brand-primary)] px-4 text-sm font-extrabold text-white shadow-sm hover:bg-[var(--brand-hover)] disabled:opacity-60"
+                className="min-h-[48px] w-full rounded-xl bg-[var(--brand-primary)] px-4 text-sm font-extrabold text-white shadow-sm hover:bg-[var(--brand-hover)] disabled:opacity-60"
               >
                 {saving ? "Menyimpan..." : editingTx ? "Simpan Perubahan" : "Simpan Transaksi"}
               </button>
@@ -1261,13 +1261,13 @@ export function TransactionSheet({
             /* AI / Voice / Multi-Transaction Capture Mode */
             <div className="space-y-4">
               <div className="flex items-center gap-3 rounded-2xl bg-[var(--bg-soft)] p-3.5">
-                <OctopusMascot mood="ai" size={62} className="shrink-0" />
+                <OctopusMascot mood="ai" size={56} className="shrink-0" />
                 <div>
                   <h3 className="text-sm font-extrabold text-[var(--text-primary)]">
-                    Catat Sekaligus Pakai Suara atau Teks
+                    Catat Pakai Suara, Teks, atau Struk
                   </h3>
                   <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-                    Ucapkan atau tulis beberapa transaksi dalam satu kalimat. Guri akan memilah kategori dan akunnya untukmu periksa sebelum disimpan.
+                    Tulis atau ucapkan beberapa transaksi sekaligus untuk diperiksa sebelum disimpan.
                   </p>
                 </div>
               </div>
@@ -1285,7 +1285,7 @@ export function TransactionSheet({
                 type="button"
                 disabled={aiBusy}
                 onClick={() => fileInputRef.current?.click()}
-                className="flex min-h-[44px] w-full items-center justify-between rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-4 py-2.5 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)] disabled:opacity-60"
+                className="flex min-h-[44px] w-full items-center justify-between rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-4 py-2.5 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)] disabled:opacity-60"
               >
                 <span className="flex items-center gap-2">
                   <CameraIcon className="h-4 w-4 text-[var(--brand-primary)] dark:text-[#fda4af]" />
@@ -1298,7 +1298,7 @@ export function TransactionSheet({
               <button
                 type="button"
                 onClick={handleVoiceToggle}
-                className={`flex min-h-[52px] w-full items-center justify-center gap-2.5 rounded-2xl px-4 text-sm font-bold text-white transition-colors ${
+                className={`flex min-h-[50px] w-full items-center justify-center gap-2.5 rounded-xl px-4 text-sm font-bold text-white transition-colors ${
                   listening
                     ? "bg-[#BE123C]"
                     : "bg-[var(--brand-primary)] hover:bg-[var(--brand-hover)]"
@@ -1340,7 +1340,7 @@ export function TransactionSheet({
                   value={aiText}
                   onChange={(e) => setAiText(e.target.value)}
                   placeholder="Contoh: Ngopi 20rb cash, bensin 50rb ovo, transfer 100rb dari cash ke bca"
-                  className="w-full rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-3 text-sm text-[var(--text-primary)]"
+                  className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-3 text-sm text-[var(--text-primary)]"
                 />
               </div>
 
@@ -1354,7 +1354,7 @@ export function TransactionSheet({
                 type="button"
                 disabled={aiBusy}
                 onClick={() => runAiParse()}
-                className="min-h-[46px] w-full rounded-2xl border-2 border-[var(--brand-primary)] bg-transparent text-sm font-extrabold text-[var(--brand-primary)] hover:bg-[var(--bg-soft)] disabled:opacity-60 dark:text-[#fda4af]"
+                className="min-h-[46px] w-full rounded-xl border-2 border-[var(--brand-primary)] bg-transparent text-sm font-extrabold text-[var(--brand-primary)] hover:bg-[var(--bg-soft)] disabled:opacity-60 dark:text-[#fda4af]"
               >
                 {aiBusy ? "Memproses transaksi..." : "Analisa Kalimat Menjadi Transaksi"}
               </button>

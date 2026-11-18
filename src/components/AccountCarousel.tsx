@@ -11,7 +11,6 @@ import {
   CloseIcon,
   EyeIcon,
   PlusIcon,
-  ScaleIcon,
 } from "./Icons";
 import { OctopusMascot, type GuriMood } from "./OctopusMascot";
 
@@ -106,7 +105,7 @@ export function AccountCarousel({
 
   return (
     <section aria-label="Kartu saldo dan rekening">
-      <div className="relative w-full overflow-hidden rounded-3xl shadow-md">
+      <div className="relative w-full overflow-hidden rounded-2xl shadow-md">
         <div
           ref={trackRef}
           onScroll={handleTrackScroll}
@@ -195,7 +194,7 @@ export function AccountCarousel({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <span className="block text-[11px] font-semibold text-[#F6D8DF]">
-                    Jatah aman hari ini ({allowance.daysLeftInCycle} hari lagi ke reset siklus)
+                    Jatah aman hari ini ({allowance.daysLeftInCycle} hari ke reset)
                   </span>
                   <span className="text-lg font-extrabold tabular-nums">
                     {formatMasked(allowance.dailyAllowance, peekTotal)} / hari
@@ -290,14 +289,15 @@ export function AccountCarousel({
                     <PlusIcon className="h-4 w-4" />
                     Catat di {acc.name}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => onOpenReconcile(acc.id)}
-                    className="flex min-h-[42px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-white/15 px-4 text-xs font-extrabold text-white hover:bg-white/25"
-                  >
-                    <ScaleIcon className="h-4 w-4" />
-                    Koreksi Saldo
-                  </button>
+                  {(acc.balance !== 0 || periodIncome > 0 || periodExpense > 0) && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenReconcile(acc.id)}
+                      className="flex min-h-[42px] flex-1 items-center justify-center rounded-xl bg-white/15 px-4 text-xs font-extrabold text-white hover:bg-white/25"
+                    >
+                      Koreksi Saldo
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -456,21 +456,16 @@ export function KoreksiSaldoModal({
     >
       <form
         onSubmit={handleSubmit}
-        className="animate-sheet-up w-full max-w-md space-y-4 rounded-t-3xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5 shadow-2xl sm:rounded-3xl"
+        className="animate-sheet-up w-full max-w-md space-y-4 rounded-t-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5 shadow-2xl sm:rounded-2xl"
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--bg-soft)] text-[var(--brand-primary)] dark:text-[#fda4af]">
-              <ScaleIcon className="h-4 w-4" />
-            </span>
-            <div>
-              <h2 id="reconcile-title" className="text-base font-extrabold text-[var(--text-primary)]">
-                Koreksi Saldo Akun
-              </h2>
-              <p className="text-xs text-[var(--text-muted)]">
-                Sesuaikan dengan saldo nyata tanpa mengacaukan statistik bulanan
-              </p>
-            </div>
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <h2 id="reconcile-title" className="text-base font-extrabold text-[var(--text-primary)]">
+              Koreksi Saldo Akun
+            </h2>
+            <p className="text-xs text-[var(--text-muted)]">
+              Samakan saldo di aplikasi dengan uang nyata
+            </p>
           </div>
           <button
             type="button"
@@ -517,7 +512,7 @@ export function KoreksiSaldoModal({
           <label htmlFor="rec-actual" className="mb-1 block text-xs font-bold text-[var(--text-muted)]">
             Saldo Asli Saat Ini (Rp)
           </label>
-          <div className="flex items-center rounded-2xl border-2 border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3.5 py-2.5 focus-within:border-[var(--brand-primary)] focus-within:ring-2 focus-within:ring-[var(--brand-ring)]">
+          <div className="flex items-center rounded-xl border-2 border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3.5 py-2.5 focus-within:border-[var(--brand-primary)] focus-within:ring-2 focus-within:ring-[var(--brand-ring)]">
             <span className="mr-2 text-base font-extrabold text-[var(--text-muted)]">Rp</span>
             <input
               id="rec-actual"
@@ -529,7 +524,7 @@ export function KoreksiSaldoModal({
                 setErrorMsg(null);
               }}
               placeholder="0"
-              className="w-full bg-transparent text-xl font-extrabold text-[var(--text-primary)] tabular-nums focus:outline-none"
+              className="w-full bg-transparent text-xl font-extrabold text-[var(--text-primary)] tabular-nums outline-none focus:outline-none focus-visible:outline-none"
             />
           </div>
         </div>
@@ -575,7 +570,7 @@ export function KoreksiSaldoModal({
         <button
           type="submit"
           disabled={busy || !hasTyped || diff === 0}
-          className="min-h-[46px] w-full rounded-2xl bg-[var(--brand-primary)] text-sm font-extrabold text-white hover:bg-[var(--brand-hover)] disabled:opacity-50"
+          className="min-h-[46px] w-full rounded-xl bg-[var(--brand-primary)] text-sm font-extrabold text-white hover:bg-[var(--brand-hover)] disabled:opacity-50"
         >
           {busy ? "Menyimpan..." : "Simpan Koreksi Saldo"}
         </button>

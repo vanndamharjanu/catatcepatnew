@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import type { AppDatabase, WorkspaceSettings } from "@/lib/types";
-import { CloseIcon, SheetIcon } from "./Icons";
+import { CloseIcon } from "./Icons";
 
 interface SheetsDrawerProps {
   open: boolean;
@@ -350,20 +350,15 @@ export function SheetsDrawer({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="animate-sheet-up flex max-h-[92dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-3xl border border-[var(--border-subtle)] bg-[var(--bg-card)] shadow-2xl sm:rounded-3xl">
+      <div className="animate-sheet-up flex max-h-[92dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] shadow-2xl sm:rounded-2xl">
         <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-5 py-4">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--bg-soft)] text-[var(--brand-primary)] dark:text-[#fda4af]">
-              <SheetIcon className="h-5 w-5" />
-            </span>
-            <div>
-              <h2 id="drawer-sheets-title" className="text-base font-extrabold text-[var(--text-primary)]">
-                Sync Google Sheets & Pengaturan SaaS
-              </h2>
-              <p className="text-xs text-[var(--text-muted)]">
-                Data cepat di workspace lokal/DB, tetap terhubung ke Google Sheets pribadi
-              </p>
-            </div>
+          <div>
+            <h2 id="drawer-sheets-title" className="text-base font-extrabold text-[var(--text-primary)]">
+              Pengaturan Akun &amp; Google Sheets
+            </h2>
+            <p className="text-xs text-[var(--text-muted)]">
+              Sinkronisasi spreadsheet &amp; target anggaran
+            </p>
           </div>
           <button
             type="button"

@@ -3,8 +3,8 @@
 import React, { useRef, useState } from "react";
 import Link from "next/link";
 import { formatRupiah, toIsoDate } from "@/lib/finance";
-import type { AppDatabase } from "@/lib/types";
-import { MicIcon, ScaleIcon, SheetIcon, ThemeIcon } from "./Icons";
+import { APP_SLOGAN, type AppDatabase } from "@/lib/types";
+import { ThemeIcon } from "./Icons";
 import { OctopusMascot } from "./OctopusMascot";
 
 interface LandingPageProps {
@@ -149,9 +149,9 @@ export function LandingPage({
   return (
     <div className="min-h-dvh w-full overflow-x-hidden bg-[var(--bg-canvas)] text-[var(--text-primary)]">
       <header className="sticky top-0 z-30 border-b border-[var(--border-subtle)] bg-[var(--bg-card)]/95 px-4 py-3 backdrop-blur-sm sm:px-8">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
+        <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[var(--brand-primary)] text-white">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--brand-primary)] text-white">
               <OctopusMascot mood="saving" size={34} />
             </div>
             <div className="min-w-0">
@@ -159,7 +159,7 @@ export function LandingPage({
                 CatatCepat
               </span>
               <span className="block truncate text-xs text-[var(--text-muted)]">
-                catatcepat.web.id
+                {APP_SLOGAN}
               </span>
             </div>
           </div>
@@ -206,47 +206,29 @@ export function LandingPage({
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-8 lg:py-12">
-        <section className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12 lg:gap-10">
-          <div className="min-w-0 space-y-6 lg:col-span-7">
+      <main className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-8 lg:py-10">
+        <section className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12 lg:gap-8">
+          <div className="min-w-0 space-y-5 lg:col-span-7">
             <div className="space-y-3">
               <h1 className="text-2xl font-extrabold tracking-tight text-[var(--text-primary)] sm:text-4xl sm:leading-tight">
                 Tahu sisa jatah belanja hari ini sebelum gaji habis di tengah bulan.
               </h1>
-              <p className="max-w-2xl text-sm leading-relaxed text-[var(--text-muted)] sm:text-base">
-                Catat pemasukan dan pengeluaran di Tunai, Rekening Bank, dan E-Wallet lewat suara,
-                kalimat singkat, atau foto struk. Data tersimpan aman di akun Cloud Anda dan dapat
-                disinkronkan langsung ke Google Sheets pribadi.
+              <p className="text-sm leading-relaxed text-[var(--text-muted)] sm:text-base">
+                Catat pemasukan dan pengeluaran lewat suara, chat, atau foto struk. Jatah aman
+                harian dihitung otomatis dan data tersinkron ke Google Sheets Anda.
               </p>
-              <div className="flex flex-wrap gap-x-4 gap-y-1.5 pt-1 text-xs font-semibold text-[var(--text-muted)]">
-                <span>Dibuka dari HP atau laptop</span>
-                <span>·</span>
-                <span>Tanpa instal aplikasi</span>
-                <span>·</span>
-                <span>Data milik Anda di Google Sheets</span>
-              </div>
             </div>
 
-            {/* Interactive AI Input Preview Card (focused clarity inspired by modern ledger UX) */}
             <div
               id="cara-catat"
-              className="rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5 shadow-sm"
+              className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5"
             >
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-3.5">
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--bg-soft)] text-[var(--brand-primary)] dark:text-[#fda4af]">
-                    <MicIcon className="h-4 w-4" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <h2 className="text-sm font-extrabold text-[var(--text-primary)]">
-                      Contoh Catat AI: Ketik, Suara, atau Foto Struk
-                    </h2>
-                    <p className="text-xs text-[var(--text-muted)]">
-                      Pilih salah satu contoh kalimat di bawah untuk melihat hasil draf otomatisnya:
-                    </p>
-                  </div>
-                </div>
-              </div>
+              <h2 className="text-sm font-extrabold text-[var(--text-primary)]">
+                Contoh Catat AI (Ketik, Suara, atau Struk)
+              </h2>
+              <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                Klik contoh kalimat di bawah untuk melihat hasil draf otomatisnya.
+              </p>
 
               <div
                 role="group"
@@ -270,7 +252,7 @@ export function LandingPage({
                 ))}
               </div>
 
-              <div className="mt-3.5 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-3.5">
+              <div className="mt-3.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-3.5">
                 <span className="block text-[11px] font-bold text-[var(--text-muted)]">
                   Input Anda:
                 </span>
@@ -307,31 +289,15 @@ export function LandingPage({
                 </div>
               </div>
             </div>
-
-            <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-4">
-              <div className="flex min-w-0 items-center gap-2.5">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--bg-soft)] text-[var(--brand-primary)] dark:text-[#fda4af]">
-                  <ScaleIcon className="h-4 w-4" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <h3 className="text-sm font-extrabold text-[var(--text-primary)]">
-                    Koreksi Saldo Dompet &amp; Tanya Guri
-                  </h3>
-                  <p className="text-xs text-[var(--text-muted)]">
-                    Cocokkan saldo Tunai, Bank, dan E-Wallet dengan uang nyata dalam 1 klik, atau tanyakan kategori paling boros langsung ke asisten Guri.
-                  </p>
-                </div>
-              </div>
-            </div>
           </div>
 
           <div id="masuk" className="min-w-0 lg:col-span-5">
-            <div className="rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-6 shadow-md">
+            <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5 shadow-md sm:p-6">
               <h2 className="text-lg font-extrabold text-[var(--text-primary)]">
-                Masuk atau Buat Akun CatatCepat
+                Masuk atau Buat Akun
               </h2>
               <p className="mt-1 text-xs text-[var(--text-muted)]">
-                Data keuangan Anda tersimpan terpisah per akun dengan isolasi Row-Level Security (RLS).
+                Data tiap akun terpisah aman dengan autentikasi Supabase.
               </p>
 
               <div className="mt-4">
@@ -339,7 +305,7 @@ export function LandingPage({
                   type="button"
                   disabled={busy || googleBusy}
                   onClick={handleGoogleLogin}
-                  className="flex min-h-[46px] w-full items-center justify-center gap-2.5 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-4 text-xs font-extrabold text-[var(--text-primary)] hover:bg-[var(--bg-soft)] disabled:opacity-60"
+                  className="flex min-h-[44px] w-full items-center justify-center gap-2.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-4 text-xs font-extrabold text-[var(--text-primary)] hover:bg-[var(--bg-soft)] disabled:opacity-60"
                 >
                   <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
                     <path
@@ -387,7 +353,7 @@ export function LandingPage({
                     setErrorMsg(null);
                     setInfoMsg(null);
                   }}
-                  className={`min-h-[44px] flex-1 rounded-lg transition-colors ${
+                  className={`min-h-[44px] flex-1 rounded-xl transition-colors ${
                     authMode === "login"
                       ? "bg-[var(--brand-primary)] text-white"
                       : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
@@ -404,7 +370,7 @@ export function LandingPage({
                     setErrorMsg(null);
                     setInfoMsg(null);
                   }}
-                  className={`min-h-[44px] flex-1 rounded-lg transition-colors ${
+                  className={`min-h-[44px] flex-1 rounded-xl transition-colors ${
                     authMode === "register"
                       ? "bg-[var(--brand-primary)] text-white"
                       : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
@@ -414,7 +380,7 @@ export function LandingPage({
                 </button>
               </div>
 
-              <form onSubmit={handleEmailSubmit} className="mt-4 space-y-3.5">
+              <form onSubmit={handleEmailSubmit} className="mt-4 space-y-3">
                 <div>
                   <label
                     htmlFor="landing-auth-email"
@@ -468,7 +434,7 @@ export function LandingPage({
                       className="h-4 w-4 rounded"
                     />
                     <span>
-                      Bawa {db.transactions.length} transaksi lokal yang ada ke akun Cloud saya
+                      Bawa {db.transactions.length} transaksi lokal ke akun Cloud
                     </span>
                   </label>
                 )}
@@ -494,7 +460,7 @@ export function LandingPage({
                 <button
                   type="submit"
                   disabled={busy || googleBusy}
-                  className="min-h-[46px] w-full rounded-2xl bg-[var(--brand-primary)] px-4 text-sm font-extrabold text-white hover:bg-[var(--brand-hover)] disabled:opacity-60"
+                  className="min-h-[46px] w-full rounded-xl bg-[var(--brand-primary)] px-4 text-sm font-extrabold text-white hover:bg-[var(--brand-hover)] disabled:opacity-60"
                 >
                   {busy
                     ? "Memproses..."
@@ -516,7 +482,7 @@ export function LandingPage({
                 .
               </p>
 
-              <div className="mt-4 border-t border-[var(--border-subtle)] pt-4">
+              <div className="mt-3.5 border-t border-[var(--border-subtle)] pt-3.5">
                 <button
                   type="button"
                   onClick={onEnterDemo}
@@ -529,22 +495,21 @@ export function LandingPage({
           </div>
         </section>
 
-        {/* Daily Allowance Simulator + Guri Companion */}
         <section
           id="jatah-harian"
-          className="mt-10 rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5 sm:p-6"
+          className="mt-8 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5 sm:p-6"
         >
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border-subtle)] pb-4">
-            <div className="flex min-w-0 items-center gap-3.5">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[var(--bg-soft)]">
-                <OctopusMascot mood="saving" size={48} />
+            <div className="flex min-w-0 flex-1 items-center gap-3.5">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--bg-soft)]">
+                <OctopusMascot mood="saving" size={42} />
               </div>
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-extrabold text-[var(--text-primary)]">
-                  Simulasi Hitungan Jatah Harian Guri
+                  Simulasi Jatah Harian Guri
                 </h2>
                 <p className="text-xs text-[var(--text-muted)]">
-                  Pilih contoh target anggaran siklus gajian untuk melihat pembagian harian otomatis:
+                  Pilih target anggaran siklus gajian:
                 </p>
               </div>
             </div>
@@ -573,7 +538,7 @@ export function LandingPage({
           </div>
 
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3 tabular-nums">
-            <div className="rounded-2xl bg-[var(--bg-canvas)] p-4">
+            <div className="rounded-xl bg-[var(--bg-canvas)] p-4">
               <span className="block text-xs font-semibold text-[var(--text-muted)]">
                 Terpakai di Siklus Ini
               </span>
@@ -581,7 +546,7 @@ export function LandingPage({
                 {formatRupiah(activeSample.spent)}
               </strong>
             </div>
-            <div className="rounded-2xl bg-[var(--bg-canvas)] p-4">
+            <div className="rounded-xl bg-[var(--bg-canvas)] p-4">
               <span className="block text-xs font-semibold text-[var(--text-muted)]">
                 Sisa Anggaran ({activeSample.daysLeft} hari)
               </span>
@@ -589,7 +554,7 @@ export function LandingPage({
                 {formatRupiah(sampleRemaining)}
               </strong>
             </div>
-            <div className="hero-maroon-gradient rounded-2xl p-4 text-white">
+            <div className="hero-maroon-gradient rounded-xl p-4 text-white">
               <span className="block text-xs font-semibold text-white/90">
                 Jatah Aman Hari Ini
               </span>
@@ -600,35 +565,26 @@ export function LandingPage({
           </div>
 
           <p className="mt-3 text-xs text-[var(--text-muted)]">
-            Jika hari ini pengeluaran Anda di bawah {formatRupiah(sampleDailyAllowance)}, sisa
-            uangnya otomatis menambah jatah harian besok dan menjaga streak harian Guri.
+            Sisa belanja hari ini otomatis menambah jatah harian besok.
           </p>
         </section>
 
-        {/* Full-Width Section: Real 8-Column Google Sheets Sync Structure */}
         <section
           id="sheets"
-          className="mt-8 w-full min-w-0 rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5 sm:p-6"
+          className="mt-6 w-full min-w-0 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5 sm:p-6"
         >
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0 max-w-2xl flex-1">
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--bg-soft)] text-[var(--brand-primary)] dark:text-[#fda4af]">
-                  <SheetIcon className="h-5 w-5" />
-                </span>
-                <h2 className="text-base font-extrabold text-[var(--text-primary)]">
-                  Data Tetap Milik Anda di Google Sheets Pribadi
-                </h2>
-              </div>
-              <p className="mt-2 text-xs leading-relaxed text-[var(--text-muted)] sm:text-sm">
-                CatatCepat membuat 1 file spreadsheet langsung di Google Drive Anda memakai izin
-                terbatas{" "}
+              <h2 className="text-base font-extrabold text-[var(--text-primary)]">
+                Data Tetap Milik Anda di Google Sheets Pribadi
+              </h2>
+              <p className="mt-1.5 text-xs leading-relaxed text-[var(--text-muted)] sm:text-sm">
+                CatatCepat hanya mengakses 1 file spreadsheet buatannya sendiri (izin{" "}
                 <code className="rounded bg-[var(--bg-soft)] px-1.5 py-0.5 font-bold text-[var(--text-primary)]">
                   drive.file
-                </code>{" "}
-                (tidak pernah membaca atau mengakses file Drive pribadi Anda yang lain). Setiap baris
-                dikunci memakai <strong>Transaction ID (UUID)</strong> agar edit atau hapus transaksi
-                tetap akurat tanpa menimpa sheet atau rumus tambahan Anda.
+                </code>
+                ), tidak membaca file Drive Anda yang lain. Tiap baris memakai{" "}
+                <strong>Transaction ID (UUID)</strong> agar edit atau hapus selalu akurat.
               </p>
             </div>
 
@@ -641,7 +597,7 @@ export function LandingPage({
             </button>
           </div>
 
-          <div className="mt-4 w-full max-w-full overflow-x-auto rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-3">
+          <div className="mt-4 w-full max-w-full overflow-x-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-3">
             <table className="w-full text-left text-xs tabular-nums">
               <thead>
                 <tr className="border-b border-[var(--border-subtle)] font-extrabold text-[var(--text-primary)]">
@@ -680,11 +636,11 @@ export function LandingPage({
       </main>
 
       <footer className="border-t border-[var(--border-subtle)] bg-[var(--bg-card)] px-4 py-6 sm:px-8">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 text-xs text-[var(--text-muted)]">
+        <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-4 text-xs text-[var(--text-muted)]">
           <div>
             <span className="font-extrabold text-[var(--text-primary)]">CatatCepat</span>
             <span className="mx-2">·</span>
-            <span>Buku kas harian &amp; sinkronisasi Google Sheets (catatcepat.web.id)</span>
+            <span>{APP_SLOGAN} (catatcepat.web.id)</span>
           </div>
 
           <div className="flex flex-wrap items-center gap-4 font-bold">

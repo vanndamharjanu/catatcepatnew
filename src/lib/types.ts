@@ -1,3 +1,5 @@
+export const APP_SLOGAN = "Catat 3 Detik, Rapi di Sheets";
+
 export type TransactionType = "Masuk" | "Keluar" | "Transfer" | "Koreksi";
 
 export type AccountKind = "cash" | "bank" | "ewallet";

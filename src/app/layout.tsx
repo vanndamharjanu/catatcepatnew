@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
+import { APP_SLOGAN } from "@/lib/types";
 import "./globals.css";
 
 const plusJakarta = Plus_Jakarta_Sans({
@@ -17,7 +18,7 @@ const siteUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://catatcepat.web.id")
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "CatatCepat - Catat Keuangan 3 Detik & Sinkron Google Sheets",
+    default: `CatatCepat - ${APP_SLOGAN}`,
     template: "%s | CatatCepat",
   },
   description:
@@ -30,7 +31,7 @@ export const metadata: Metadata = {
     locale: "id_ID",
     url: "/",
     siteName: "CatatCepat",
-    title: "CatatCepat - Catat Keuangan 3 Detik & Sinkron Google Sheets",
+    title: `CatatCepat - ${APP_SLOGAN}`,
     description:
       "Catat pengeluaran dan pemasukan lewat suara, chat AI, atau foto struk. Hitung jatah aman harian otomatis dan sinkronkan ke Google Sheets pribadi.",
     images: [
@@ -38,13 +39,13 @@ export const metadata: Metadata = {
         url: "/og-catatcepat.png",
         width: 1200,
         height: 630,
-        alt: "CatatCepat - Buku kas harian & sinkronisasi Google Sheets",
+        alt: `CatatCepat - ${APP_SLOGAN}`,
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "CatatCepat - Catat Keuangan 3 Detik & Sinkron Google Sheets",
+    title: `CatatCepat - ${APP_SLOGAN}`,
     description:
       "Catat pengeluaran lewat suara, chat AI, atau foto struk. Jatah aman harian otomatis & sinkron ke Google Sheets pribadi.",
     images: ["/og-catatcepat.png"],

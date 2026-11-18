@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { OctopusMascot } from "@/components/OctopusMascot";
+import { APP_SLOGAN } from "@/lib/types";
 
 export const metadata: Metadata = {
   title: "Ketentuan Layanan",
@@ -12,16 +13,16 @@ export default function TermsPage() {
   return (
     <div className="min-h-dvh bg-[var(--bg-canvas)] text-[var(--text-primary)]">
       <header className="border-b border-[var(--border-subtle)] bg-[var(--bg-card)] px-4 py-3.5 sm:px-8">
-        <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
           <Link href="/" className="flex min-h-[44px] items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[var(--brand-primary)] text-white">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--brand-primary)] text-white">
               <OctopusMascot mood="saving" size={34} />
             </span>
             <div>
               <span className="block text-base font-extrabold text-[var(--text-primary)]">
                 CatatCepat
               </span>
-              <span className="block text-xs text-[var(--text-muted)]">catatcepat.web.id</span>
+              <span className="block text-xs text-[var(--text-muted)]">{APP_SLOGAN}</span>
             </div>
           </Link>
 
@@ -34,8 +35,8 @@ export default function TermsPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-4xl px-4 py-8 sm:px-8 sm:py-12">
-        <article className="space-y-6 rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-6 sm:p-8">
+      <main className="mx-auto max-w-5xl px-4 py-8 sm:px-8 sm:py-10">
+        <article className="space-y-6 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-6 sm:p-8">
           <div className="border-b border-[var(--border-subtle)] pb-5">
             <h1 className="text-2xl font-extrabold tracking-tight text-[var(--text-primary)] sm:text-3xl">
               Ketentuan Layanan CatatCepat
@@ -121,9 +122,9 @@ export default function TermsPage() {
         </article>
       </main>
 
-      <footer className="border-t border-[var(--border-subtle)] px-4 py-6 text-center text-xs text-[var(--text-muted)]">
-        <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3">
-          <span>CatatCepat (catatcepat.web.id)</span>
+      <footer className="border-t border-[var(--border-subtle)] px-4 py-6 text-center text-xs text-[var(--text-muted)] sm:px-8">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3">
+          <span>CatatCepat · {APP_SLOGAN}</span>
           <div className="flex items-center gap-4">
             <Link href="/privacy" className="hover:underline">
               Kebijakan Privasi
