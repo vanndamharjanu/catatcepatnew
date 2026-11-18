@@ -639,10 +639,10 @@ export function AppClient({ initialDb }: AppClientProps) {
                 type="button"
                 onClick={() => setSheetsOpen(true)}
                 aria-label="Pengaturan Google Sheets dan anggaran"
-                className="flex min-h-[40px] items-center gap-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
+                className="flex h-10 min-w-10 items-center justify-center gap-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-card)] text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)] sm:px-3"
               >
-                <SheetIcon className="h-3.5 w-3.5 text-[var(--brand-primary)] dark:text-[#fda4af]" />
-                <span>{db.sheetConnection.connected ? "Sheets Aktif" : "Sheets & Atur"}</span>
+                <SheetIcon className="h-4 w-4 text-[var(--brand-primary)] dark:text-[#fda4af] sm:h-3.5 sm:w-3.5" />
+                <span className="hidden sm:inline">{db.sheetConnection.connected ? "Sheets Aktif" : "Sheets & Atur"}</span>
               </button>
 
               <button
@@ -690,9 +690,13 @@ export function AppClient({ initialDb }: AppClientProps) {
           {/* ================================================= */}
           {activeTab === "beranda" && (
             <>
-              {/* Period Filter & Privacy Toggle */}
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap gap-1.5" role="group" aria-label="Rentang waktu ringkasan">
+              {/* Period Filter & Privacy Toggle: one row; chips scroll sideways on narrow phones */}
+              <div className="flex items-center gap-2">
+                <div
+                  className="no-scrollbar flex min-w-0 flex-1 gap-1.5 overflow-x-auto"
+                  role="group"
+                  aria-label="Rentang waktu ringkasan"
+                >
                   {(
                     [
                       { key: "today", label: "Hari ini" },
@@ -707,7 +711,8 @@ export function AppClient({ initialDb }: AppClientProps) {
                         key={item.key}
                         type="button"
                         onClick={() => setTimeRange(item.key)}
-                        className={`min-h-[38px] rounded-full px-3.5 text-xs font-bold transition-colors ${
+                        aria-pressed={active}
+                        className={`min-h-[38px] shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-bold transition-colors sm:px-3.5 ${
                           active
                             ? "bg-[var(--brand-deep)] text-white"
                             : "border border-[var(--border-subtle)] bg-[var(--bg-card)] text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
@@ -723,7 +728,7 @@ export function AppClient({ initialDb }: AppClientProps) {
                   type="button"
                   onClick={() => setHideNumbers((v) => !v)}
                   aria-label={hideNumbers ? "Tampilkan nominal saldo" : "Sembunyikan nominal saldo"}
-                  className="flex min-h-[38px] items-center gap-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 text-xs font-bold text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                  className="flex min-h-[38px] min-w-[38px] shrink-0 items-center justify-center gap-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-card)] text-xs font-bold text-[var(--text-muted)] hover:text-[var(--text-primary)] sm:px-3"
                 >
                   <EyeIcon off={hideNumbers} className="h-4 w-4" />
                   <span className="hidden sm:inline">{hideNumbers ? "Tampilkan" : "Sembunyikan"}</span>
