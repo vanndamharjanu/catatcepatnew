@@ -9,10 +9,46 @@ const plusJakarta = Plus_Jakarta_Sans({
   variable: "--font-jakarta",
 });
 
+const siteUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://catatcepat.web.id").replace(
+  /\/+$/,
+  "",
+);
+
 export const metadata: Metadata = {
-  title: "CatatCepat - Pencatat Keuangan Pribadi",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "CatatCepat - Catat Keuangan 3 Detik & Sinkron Google Sheets",
+    template: "%s | CatatCepat",
+  },
   description:
-    "Catat pengeluaran dan pemasukan harian dengan cepat, hitung jatah aman harian, dan sinkronkan otomatis ke Google Sheets pribadi.",
+    "Catat pengeluaran dan pemasukan lewat suara, chat AI, atau foto struk. Hitung jatah aman harian otomatis dan sinkronkan langsung ke Google Sheets pribadi Anda.",
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    locale: "id_ID",
+    url: "/",
+    siteName: "CatatCepat",
+    title: "CatatCepat - Catat Keuangan 3 Detik & Sinkron Google Sheets",
+    description:
+      "Catat pengeluaran dan pemasukan lewat suara, chat AI, atau foto struk. Hitung jatah aman harian otomatis dan sinkronkan ke Google Sheets pribadi.",
+    images: [
+      {
+        url: "/og-catatcepat.png",
+        width: 1200,
+        height: 630,
+        alt: "CatatCepat - Buku kas harian & sinkronisasi Google Sheets",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "CatatCepat - Catat Keuangan 3 Detik & Sinkron Google Sheets",
+    description:
+      "Catat pengeluaran lewat suara, chat AI, atau foto struk. Jatah aman harian otomatis & sinkron ke Google Sheets pribadi.",
+    images: ["/og-catatcepat.png"],
+  },
 };
 
 // R-39: Allow user zoom cleanly without maximum-scale=1 or user-scalable=no

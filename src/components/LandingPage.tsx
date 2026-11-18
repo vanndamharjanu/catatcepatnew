@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useRef, useState } from "react";
+import Link from "next/link";
 import { formatRupiah, toIsoDate } from "@/lib/finance";
 import type { AppDatabase } from "@/lib/types";
 import { MicIcon, ScaleIcon, SheetIcon, ThemeIcon } from "./Icons";
@@ -21,6 +22,34 @@ const SAMPLE_BUDGETS = [
   { label: "Rp 8.000.000", budget: 8_000_000, spent: 2_600_000, daysLeft: 12 },
 ];
 
+const CHAT_EXAMPLES = [
+  {
+    id: "kopi",
+    label: "Jajan & Parkir",
+    prompt: "Ngopi 25rb pake ewallet, parkir 2rb tunai",
+    rows: [
+      { category: "Makanan", note: "Ngopi", account: "E-Wallet", type: "Keluar" as const, amount: 25_000 },
+      { category: "Transportasi", note: "Parkir", account: "Tunai", type: "Keluar" as const, amount: 2_000 },
+    ],
+  },
+  {
+    id: "gaji",
+    label: "Gaji Masuk",
+    prompt: "Gajian 5,2 juta masuk rekening bank",
+    rows: [
+      { category: "Gaji", note: "Gajian", account: "Rekening Bank", type: "Masuk" as const, amount: 5_200_000 },
+    ],
+  },
+  {
+    id: "belanja",
+    label: "Belanja Harian",
+    prompt: "Belanja kebutuhan rumah 145rb qris",
+    rows: [
+      { category: "Kebutuhan Sehari-hari", note: "Belanja kebutuhan rumah", account: "E-Wallet", type: "Keluar" as const, amount: 145_000 },
+    ],
+  },
+];
+
 export function LandingPage({
   db,
   darkMode,
@@ -38,12 +67,14 @@ export function LandingPage({
   const [errorMsg, setErrorMsg] = useState<string | null>(initialError || null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
   const [sampleIdx, setSampleIdx] = useState(0);
+  const [chatExampleIdx, setChatExampleIdx] = useState(0);
 
   const emailInputRef = useRef<HTMLInputElement>(null);
 
   const activeSample = SAMPLE_BUDGETS[sampleIdx] ?? SAMPLE_BUDGETS[0];
   const sampleRemaining = Math.max(0, activeSample.budget - activeSample.spent);
   const sampleDailyAllowance = Math.floor(sampleRemaining / activeSample.daysLeft);
+  const activeChatExample = CHAT_EXAMPLES[chatExampleIdx] ?? CHAT_EXAMPLES[0];
   const todayIso = toIsoDate();
 
   const handleFocusLogin = () => {
@@ -116,10 +147,10 @@ export function LandingPage({
   };
 
   return (
-    <div className="min-h-dvh bg-[var(--bg-canvas)] text-[var(--text-primary)]">
-      <header className="border-b border-[var(--border-subtle)] bg-[var(--bg-card)]/95 px-4 py-3.5 sm:px-8">
+    <div className="min-h-dvh w-full overflow-x-hidden bg-[var(--bg-canvas)] text-[var(--text-primary)]">
+      <header className="sticky top-0 z-30 border-b border-[var(--border-subtle)] bg-[var(--bg-card)]/95 px-4 py-3 backdrop-blur-sm sm:px-8">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[var(--brand-primary)] text-white">
               <OctopusMascot mood="saving" size={34} />
             </div>
@@ -128,12 +159,30 @@ export function LandingPage({
                 CatatCepat
               </span>
               <span className="block truncate text-xs text-[var(--text-muted)]">
-                Buku kas harian & sinkronisasi Google Sheets pribadi
+                catatcepat.web.id
               </span>
             </div>
           </div>
 
-          <nav aria-label="Aksi halaman awal" className="flex shrink-0 items-center gap-2">
+          <nav
+            aria-label="Navigasi landing page"
+            className="hidden items-center gap-5 text-xs font-bold text-[var(--text-muted)] md:flex"
+          >
+            <a href="#cara-catat" className="hover:text-[var(--text-primary)]">
+              Catat AI
+            </a>
+            <a href="#jatah-harian" className="hover:text-[var(--text-primary)]">
+              Jatah Harian
+            </a>
+            <a href="#sheets" className="hover:text-[var(--text-primary)]">
+              Google Sheets
+            </a>
+            <Link href="/privacy" className="hover:text-[var(--text-primary)]">
+              Privasi
+            </Link>
+          </nav>
+
+          <div className="flex shrink-0 items-center gap-2">
             <button
               type="button"
               onClick={onToggleDarkMode}
@@ -142,7 +191,7 @@ export function LandingPage({
             >
               <ThemeIcon dark={darkMode} className="h-4 w-4" />
               <span className="ml-1.5 hidden sm:inline">
-                {darkMode ? "Mode Terang" : "Mode Gelap"}
+                {darkMode ? "Terang" : "Gelap"}
               </span>
             </button>
 
@@ -153,135 +202,136 @@ export function LandingPage({
             >
               Buka Demo
             </button>
-          </nav>
+          </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-8 lg:py-12">
-        <section className="grid items-start gap-8 lg:grid-cols-12 lg:gap-10">
-          <div className="space-y-6 lg:col-span-7">
+      <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-8 lg:py-12">
+        <section className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12 lg:gap-10">
+          <div className="min-w-0 space-y-6 lg:col-span-7">
             <div className="space-y-3">
               <h1 className="text-2xl font-extrabold tracking-tight text-[var(--text-primary)] sm:text-4xl sm:leading-tight">
                 Tahu sisa jatah belanja hari ini sebelum gaji habis di tengah bulan.
               </h1>
               <p className="max-w-2xl text-sm leading-relaxed text-[var(--text-muted)] sm:text-base">
-                Catat pengeluaran lewat suara, kalimat singkat, atau foto struk. Setiap transaksi
-                tersimpan di akun Cloud Anda dan dapat disinkronkan langsung ke file Google Sheets
-                di Google Drive pribadi Anda.
+                Catat pemasukan dan pengeluaran di Tunai, Rekening Bank, dan E-Wallet lewat suara,
+                kalimat singkat, atau foto struk. Data tersimpan aman di akun Cloud Anda dan dapat
+                disinkronkan langsung ke Google Sheets pribadi.
               </p>
+              <div className="flex flex-wrap gap-x-4 gap-y-1.5 pt-1 text-xs font-semibold text-[var(--text-muted)]">
+                <span>Dibuka dari HP atau laptop</span>
+                <span>·</span>
+                <span>Tanpa instal aplikasi</span>
+                <span>·</span>
+                <span>Data milik Anda di Google Sheets</span>
+              </div>
             </div>
 
-            <div className="rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border-subtle)] pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[var(--bg-soft)]">
-                    <OctopusMascot mood="saving" size={42} />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-extrabold text-[var(--text-primary)]">
-                      Simulasi Hitungan Jatah Harian Guri
-                    </h2>
-                    <p className="text-xs text-[var(--text-muted)]">
-                      Pilih contoh target anggaran siklus gajian untuk melihat pembagian otomatis:
-                    </p>
-                  </div>
-                </div>
-
-                <div
-                  role="group"
-                  aria-label="Pilih contoh target anggaran"
-                  className="flex flex-wrap gap-1.5"
-                >
-                  {SAMPLE_BUDGETS.map((item, idx) => (
-                    <button
-                      key={item.label}
-                      type="button"
-                      onClick={() => setSampleIdx(idx)}
-                      aria-pressed={sampleIdx === idx}
-                      className={`min-h-[44px] rounded-xl px-3 text-xs font-bold tabular-nums transition-colors ${
-                        sampleIdx === idx
-                          ? "bg-[var(--brand-primary)] text-white"
-                          : "border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
-                      }`}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-4 grid gap-3 sm:grid-cols-3 tabular-nums">
-                <div className="rounded-2xl bg-[var(--bg-canvas)] p-3.5">
-                  <span className="block text-xs font-semibold text-[var(--text-muted)]">
-                    Terpakai di Siklus Ini
-                  </span>
-                  <strong className="mt-1 block text-base font-extrabold text-[var(--text-primary)]">
-                    {formatRupiah(activeSample.spent)}
-                  </strong>
-                </div>
-                <div className="rounded-2xl bg-[var(--bg-canvas)] p-3.5">
-                  <span className="block text-xs font-semibold text-[var(--text-muted)]">
-                    Sisa Anggaran ({activeSample.daysLeft} hari)
-                  </span>
-                  <strong className="mt-1 block text-base font-extrabold text-[var(--text-primary)]">
-                    {formatRupiah(sampleRemaining)}
-                  </strong>
-                </div>
-                <div className="hero-maroon-gradient rounded-2xl p-3.5 text-white">
-                  <span className="block text-xs font-semibold text-white/90">
-                    Jatah Aman Hari Ini
-                  </span>
-                  <strong className="mt-1 block text-lg font-extrabold">
-                    {formatRupiah(sampleDailyAllowance)}
-                  </strong>
-                </div>
-              </div>
-
-              <p className="mt-3 text-xs text-[var(--text-muted)]">
-                Jika hari ini pengeluaran Anda di bawah {formatRupiah(sampleDailyAllowance)}, sisa
-                uangnya otomatis menambah jatah harian besok.
-              </p>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-4">
-                <div className="flex items-center gap-2.5">
+            {/* Interactive AI Input Preview Card (focused clarity inspired by modern ledger UX) */}
+            <div
+              id="cara-catat"
+              className="rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5 shadow-sm"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-3.5">
+                <div className="flex min-w-0 items-center gap-2.5">
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--bg-soft)] text-[var(--brand-primary)] dark:text-[#fda4af]">
                     <MicIcon className="h-4 w-4" />
                   </span>
-                  <h3 className="text-sm font-extrabold text-[var(--text-primary)]">
-                    Ketik Kalimat, Rekam Suara, atau Foto Struk
-                  </h3>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-sm font-extrabold text-[var(--text-primary)]">
+                      Contoh Catat AI: Ketik, Suara, atau Foto Struk
+                    </h2>
+                    <p className="text-xs text-[var(--text-muted)]">
+                      Pilih salah satu contoh kalimat di bawah untuk melihat hasil draf otomatisnya:
+                    </p>
+                  </div>
                 </div>
-                <p className="mt-2 text-xs leading-relaxed text-[var(--text-muted)]">
-                  Tulis seperti chat biasa: <code className="rounded bg-[var(--bg-soft)] px-1.5 py-0.5 font-bold text-[var(--text-primary)]">Makan siang 28rb qris, bensin 35rb tunai</code>. Otomatis terpecah menjadi draf transaksi lengkap dengan kategori dan akun dompetnya.
-                </p>
               </div>
 
-              <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-4">
-                <div className="flex items-center gap-2.5">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--bg-soft)] text-[var(--brand-primary)] dark:text-[#fda4af]">
-                    <ScaleIcon className="h-4 w-4" />
-                  </span>
-                  <h3 className="text-sm font-extrabold text-[var(--text-primary)]">
-                    Koreksi Saldo Dompet & Target Tabungan
-                  </h3>
-                </div>
-                <p className="mt-2 text-xs leading-relaxed text-[var(--text-muted)]">
-                  Pisahkan saldo Tunai, Rekening Bank, dan E-Wallet. Lupa mencatat pengeluaran kecil?
-                  Masukkan saldo nyata dompet Anda dan selisihnya tercatat otomatis sebagai transaksi koreksi.
+              <div
+                role="group"
+                aria-label="Pilih contoh kalimat transaksi"
+                className="mt-3.5 flex flex-wrap gap-2"
+              >
+                {CHAT_EXAMPLES.map((ex, idx) => (
+                  <button
+                    key={ex.id}
+                    type="button"
+                    onClick={() => setChatExampleIdx(idx)}
+                    aria-pressed={chatExampleIdx === idx}
+                    className={`min-h-[44px] rounded-xl px-3.5 text-xs font-bold transition-colors ${
+                      chatExampleIdx === idx
+                        ? "bg-[var(--brand-primary)] text-white"
+                        : "border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
+                    }`}
+                  >
+                    {ex.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-3.5 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-3.5">
+                <span className="block text-[11px] font-bold text-[var(--text-muted)]">
+                  Input Anda:
+                </span>
+                <p className="mt-1 text-sm font-extrabold text-[var(--text-primary)]">
+                  &ldquo;{activeChatExample.prompt}&rdquo;
                 </p>
+
+                <div className="mt-3 space-y-2 border-t border-[var(--border-subtle)] pt-3">
+                  {activeChatExample.rows.map((row) => (
+                    <div
+                      key={`${row.category}-${row.note}`}
+                      className="flex items-center justify-between gap-3 rounded-xl bg-[var(--bg-card)] px-3 py-2.5 text-xs"
+                    >
+                      <div className="min-w-0">
+                        <span className="block truncate font-extrabold text-[var(--text-primary)]">
+                          {row.note}
+                        </span>
+                        <span className="block text-[11px] text-[var(--text-muted)]">
+                          {row.category} · {row.account}
+                        </span>
+                      </div>
+                      <strong
+                        className={`shrink-0 whitespace-nowrap tabular-nums ${
+                          row.type === "Masuk"
+                            ? "text-[var(--income-text)]"
+                            : "text-[var(--expense-text)]"
+                        }`}
+                      >
+                        {row.type === "Masuk" ? "+" : "-"}
+                        {formatRupiah(row.amount)}
+                      </strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-4">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--bg-soft)] text-[var(--brand-primary)] dark:text-[#fda4af]">
+                  <ScaleIcon className="h-4 w-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-sm font-extrabold text-[var(--text-primary)]">
+                    Koreksi Saldo Dompet &amp; Tanya Guri
+                  </h3>
+                  <p className="text-xs text-[var(--text-muted)]">
+                    Cocokkan saldo Tunai, Bank, dan E-Wallet dengan uang nyata dalam 1 klik, atau tanyakan kategori paling boros langsung ke asisten Guri.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="lg:col-span-5">
+          <div id="masuk" className="min-w-0 lg:col-span-5">
             <div className="rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-6 shadow-md">
               <h2 className="text-lg font-extrabold text-[var(--text-primary)]">
                 Masuk atau Buat Akun CatatCepat
               </h2>
               <p className="mt-1 text-xs text-[var(--text-muted)]">
-                Data keuangan Anda disimpan terpisah per akun dengan Row-Level Security (RLS) Supabase.
+                Data keuangan Anda tersimpan terpisah per akun dengan isolasi Row-Level Security (RLS).
               </p>
 
               <div className="mt-4">
@@ -454,6 +504,18 @@ export function LandingPage({
                 </button>
               </form>
 
+              <p className="mt-3 text-center text-[11px] leading-relaxed text-[var(--text-muted)]">
+                Dengan masuk, Anda menyetujui{" "}
+                <Link href="/terms" className="font-bold text-[var(--text-primary)] underline">
+                  Ketentuan Layanan
+                </Link>{" "}
+                dan{" "}
+                <Link href="/privacy" className="font-bold text-[var(--text-primary)] underline">
+                  Kebijakan Privasi
+                </Link>
+                .
+              </p>
+
               <div className="mt-4 border-t border-[var(--border-subtle)] pt-4">
                 <button
                   type="button"
@@ -462,17 +524,94 @@ export function LandingPage({
                 >
                   Buka Mode Demo Tanpa Daftar
                 </button>
-                <p className="mt-1.5 text-center text-[11px] text-[var(--text-muted)]">
-                  Ingin mencoba fitur dulu? Mode demo menyimpan data sementara di perangkat ini.
-                </p>
               </div>
             </div>
           </div>
         </section>
 
-        <section className="mt-10 rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5 sm:p-6">
+        {/* Daily Allowance Simulator + Guri Companion */}
+        <section
+          id="jatah-harian"
+          className="mt-10 rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5 sm:p-6"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border-subtle)] pb-4">
+            <div className="flex min-w-0 items-center gap-3.5">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[var(--bg-soft)]">
+                <OctopusMascot mood="saving" size={48} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-extrabold text-[var(--text-primary)]">
+                  Simulasi Hitungan Jatah Harian Guri
+                </h2>
+                <p className="text-xs text-[var(--text-muted)]">
+                  Pilih contoh target anggaran siklus gajian untuk melihat pembagian harian otomatis:
+                </p>
+              </div>
+            </div>
+
+            <div
+              role="group"
+              aria-label="Pilih contoh target anggaran"
+              className="flex flex-wrap gap-1.5"
+            >
+              {SAMPLE_BUDGETS.map((item, idx) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={() => setSampleIdx(idx)}
+                  aria-pressed={sampleIdx === idx}
+                  className={`min-h-[44px] rounded-xl px-3.5 text-xs font-bold tabular-nums transition-colors ${
+                    sampleIdx === idx
+                      ? "bg-[var(--brand-primary)] text-white"
+                      : "border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3 tabular-nums">
+            <div className="rounded-2xl bg-[var(--bg-canvas)] p-4">
+              <span className="block text-xs font-semibold text-[var(--text-muted)]">
+                Terpakai di Siklus Ini
+              </span>
+              <strong className="mt-1 block text-lg font-extrabold text-[var(--text-primary)]">
+                {formatRupiah(activeSample.spent)}
+              </strong>
+            </div>
+            <div className="rounded-2xl bg-[var(--bg-canvas)] p-4">
+              <span className="block text-xs font-semibold text-[var(--text-muted)]">
+                Sisa Anggaran ({activeSample.daysLeft} hari)
+              </span>
+              <strong className="mt-1 block text-lg font-extrabold text-[var(--text-primary)]">
+                {formatRupiah(sampleRemaining)}
+              </strong>
+            </div>
+            <div className="hero-maroon-gradient rounded-2xl p-4 text-white">
+              <span className="block text-xs font-semibold text-white/90">
+                Jatah Aman Hari Ini
+              </span>
+              <strong className="mt-1 block text-xl font-extrabold">
+                {formatRupiah(sampleDailyAllowance)}
+              </strong>
+            </div>
+          </div>
+
+          <p className="mt-3 text-xs text-[var(--text-muted)]">
+            Jika hari ini pengeluaran Anda di bawah {formatRupiah(sampleDailyAllowance)}, sisa
+            uangnya otomatis menambah jatah harian besok dan menjaga streak harian Guri.
+          </p>
+        </section>
+
+        {/* Full-Width Section: Real 8-Column Google Sheets Sync Structure */}
+        <section
+          id="sheets"
+          className="mt-8 w-full min-w-0 rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5 sm:p-6"
+        >
           <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="max-w-2xl">
+            <div className="min-w-0 max-w-2xl flex-1">
               <div className="flex items-center gap-2.5">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--bg-soft)] text-[var(--brand-primary)] dark:text-[#fda4af]">
                   <SheetIcon className="h-5 w-5" />
@@ -482,14 +621,14 @@ export function LandingPage({
                 </h2>
               </div>
               <p className="mt-2 text-xs leading-relaxed text-[var(--text-muted)] sm:text-sm">
-                Berbeda dari aplikasi keuangan yang mengunci data di server internal, CatatCepat
-                membuat file spreadsheet langsung di Google Drive Anda menggunakan izin{" "}
+                CatatCepat membuat 1 file spreadsheet langsung di Google Drive Anda memakai izin
+                terbatas{" "}
                 <code className="rounded bg-[var(--bg-soft)] px-1.5 py-0.5 font-bold text-[var(--text-primary)]">
                   drive.file
                 </code>{" "}
-                (hanya mengakses file yang dibuat oleh CatatCepat). Setiap baris dikunci dengan{" "}
-                <strong>Transaction ID (UUID)</strong> agar edit atau hapus transaksi di aplikasi
-                memperbarui baris yang tepat di spreadsheet tanpa menimpa rumus atau tab buatan Anda.
+                (tidak pernah membaca atau mengakses file Drive pribadi Anda yang lain). Setiap baris
+                dikunci memakai <strong>Transaction ID (UUID)</strong> agar edit atau hapus transaksi
+                tetap akurat tanpa menimpa sheet atau rumus tambahan Anda.
               </p>
             </div>
 
@@ -502,7 +641,7 @@ export function LandingPage({
             </button>
           </div>
 
-          <div className="mt-4 overflow-x-auto rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-3">
+          <div className="mt-4 w-full max-w-full overflow-x-auto rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-3">
             <table className="w-full text-left text-xs tabular-nums">
               <thead>
                 <tr className="border-b border-[var(--border-subtle)] font-extrabold text-[var(--text-primary)]">
@@ -539,6 +678,31 @@ export function LandingPage({
           </div>
         </section>
       </main>
+
+      <footer className="border-t border-[var(--border-subtle)] bg-[var(--bg-card)] px-4 py-6 sm:px-8">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 text-xs text-[var(--text-muted)]">
+          <div>
+            <span className="font-extrabold text-[var(--text-primary)]">CatatCepat</span>
+            <span className="mx-2">·</span>
+            <span>Buku kas harian &amp; sinkronisasi Google Sheets (catatcepat.web.id)</span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-4 font-bold">
+            <Link href="/privacy" className="py-1 text-[var(--text-primary)] hover:underline">
+              Kebijakan Privasi
+            </Link>
+            <Link href="/terms" className="py-1 text-[var(--text-primary)] hover:underline">
+              Ketentuan Layanan
+            </Link>
+            <a
+              href="mailto:vanndamharjanu@gmail.com"
+              className="py-1 text-[var(--text-primary)] hover:underline"
+            >
+              Kontak
+            </a>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
