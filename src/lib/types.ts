@@ -93,9 +93,11 @@ export interface SheetConnection {
   spreadsheetId?: string;
   spreadsheetUrl?: string;
   sheetTabName: string;
+  sheetTabId?: number;
   encryptedRefreshToken?: string;
   lastSyncedAt?: string;
   lastError?: string;
+  pendingDeletes?: string[];
 }
 
 export interface WorkspaceSettings {

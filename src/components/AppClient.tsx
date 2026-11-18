@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   computeAccountBalances,
   computeDailyAllowance,
@@ -104,6 +104,53 @@ export function AppClient({ initialDb }: AppClientProps) {
   const [toast, setToast] = useState<string | null>(null);
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState(false);
+
+  // Serialized non-blocking background sync to Google Sheets
+  const syncInFlightRef = useRef(false);
+  const syncQueuedModeRef = useRef<"none" | "incremental" | "full">("none");
+
+  const triggerBackgroundSync = useCallback(async (full = false) => {
+    if (syncInFlightRef.current) {
+      if (full || syncQueuedModeRef.current === "none") {
+        syncQueuedModeRef.current = full ? "full" : "incremental";
+      }
+      return;
+    }
+
+    syncInFlightRef.current = true;
+    try {
+      const res = await fetch("/api/sheets/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ full }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        state?: AppDatabase;
+      };
+      if (data.state) {
+        setDb(data.state);
+      }
+    } catch {
+      // Transient network errors stay queued as sheetSyncStatus="pending" / pendingDeletes.
+    } finally {
+      syncInFlightRef.current = false;
+      const queuedMode = syncQueuedModeRef.current;
+      if (queuedMode !== "none") {
+        syncQueuedModeRef.current = "none";
+        void triggerBackgroundSync(queuedMode === "full");
+      }
+    }
+  }, []);
+
+  const applyDbState = (
+    next: AppDatabase,
+    syncMode: "incremental" | "full" = "incremental",
+  ) => {
+    setDb(next);
+    if (next.sheetConnection.connected) {
+      void triggerBackgroundSync(syncMode === "full");
+    }
+  };
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -311,7 +358,7 @@ export function AppClient({ initialDb }: AppClientProps) {
     actualBalance: number;
     note: string;
   }) => {
-    setDb(
+    applyDbState(
       await callApi(
         "/api/transactions",
         {
@@ -340,7 +387,7 @@ export function AppClient({ initialDb }: AppClientProps) {
     amount: number;
     note: string;
   }) => {
-    setDb(
+    applyDbState(
       await callApi(
         "/api/transactions",
         {
@@ -355,7 +402,7 @@ export function AppClient({ initialDb }: AppClientProps) {
   };
 
   const handleSaveBatch = async (drafts: ParsedTransactionDraft[]) => {
-    setDb(
+    applyDbState(
       await callApi(
         "/api/transactions",
         {
@@ -383,7 +430,7 @@ export function AppClient({ initialDb }: AppClientProps) {
   const handleDeleteTx = async (id: string) => {
     setBusyAction(true);
     try {
-      setDb(
+      applyDbState(
         await callApi(
           `/api/transactions?id=${encodeURIComponent(id)}`,
           { method: "DELETE" },
@@ -423,7 +470,7 @@ export function AppClient({ initialDb }: AppClientProps) {
     categoryId: string,
     updates: { name?: string; iconKey?: string },
   ) => {
-    setDb(
+    applyDbState(
       await callApi(
         "/api/state",
         {
@@ -442,7 +489,7 @@ export function AppClient({ initialDb }: AppClientProps) {
   };
 
   const handleDeleteCategory = async (categoryId: string, replacementCategory?: string) => {
-    setDb(
+    applyDbState(
       await callApi(
         "/api/state",
         {
@@ -480,7 +527,7 @@ export function AppClient({ initialDb }: AppClientProps) {
   const handleLoadSimulation = async () => {
     setBusyAction(true);
     try {
-      setDb(
+      applyDbState(
         await callApi(
           "/api/state",
           {
@@ -490,6 +537,7 @@ export function AppClient({ initialDb }: AppClientProps) {
           },
           "Gagal memuat data simulasi.",
         ),
+        "full",
       );
       showToast("Data simulasi contoh dimuat.");
     } catch (err) {
@@ -541,7 +589,7 @@ export function AppClient({ initialDb }: AppClientProps) {
     setBusyAction(true);
     setModalError(null);
     try {
-      setDb(
+      applyDbState(
         await callApi(
           "/api/goals",
           {
@@ -578,7 +626,7 @@ export function AppClient({ initialDb }: AppClientProps) {
     }
     setBusyAction(true);
     try {
-      setDb(
+      applyDbState(
         await callApi(
           `/api/goals?id=${encodeURIComponent(id)}`,
           { method: "DELETE" },
@@ -1770,66 +1818,118 @@ export function AppClient({ initialDb }: AppClientProps) {
         db={db}
         onClose={() => setSheetsOpen(false)}
         onStateUpdated={setDb}
+        onTriggerSync={triggerBackgroundSync}
         onNotify={showToast}
       />
 
       {/* Rumus Jatah Harian Modal */}
-      {formulaModalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="formula-title"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setFormulaModalOpen(false);
-          }}
-        >
-          <div className="w-full max-w-md rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <h2 id="formula-title" className="text-base font-extrabold text-[var(--text-primary)]">
-                Cara Hitung Jatah Harian
-              </h2>
-              <button
-                type="button"
-                onClick={() => setFormulaModalOpen(false)}
-                aria-label="Tutup rumus"
-                className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--text-muted)] hover:bg-[var(--bg-soft)]"
-              >
-                <CloseIcon className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="mt-3 space-y-2.5 text-xs leading-relaxed text-[var(--text-primary)] tabular-nums">
-              <p className="rounded-xl bg-[var(--bg-canvas)] p-3">
-                <strong>Rumus:</strong> (Target Budget - Pengeluaran sebelum hari ini) / Sisa hari di siklus
-              </p>
-              <div className="space-y-1 rounded-xl border border-[var(--border-subtle)] p-3">
-                <div className="flex justify-between">
-                  <span className="text-[var(--text-muted)]">Target siklus ({allowance.cycleStart} s.d. {allowance.cycleEnd})</span>
-                  <strong>{formatRupiah(db.settings.monthlyBudget)}</strong>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[var(--text-muted)]">Terpakai siklus ini</span>
-                  <strong>{formatRupiah(allowance.spentInCycle)}</strong>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[var(--text-muted)]">Sisa hari</span>
-                  <strong>{allowance.daysLeftInCycle} hari</strong>
-                </div>
-                <div className="flex justify-between border-t border-[var(--border-subtle)] pt-1.5">
-                  <span className="font-bold">Jatah aman hari ini</span>
-                  <strong className="text-[var(--brand-primary)] dark:text-[#fda4af]">
-                    {formatRupiah(allowance.dailyAllowance)}
-                  </strong>
-                </div>
+      {formulaModalOpen && (() => {
+        const spentBeforeToday = Math.max(0, allowance.spentInCycle - allowance.spentToday);
+        const formatShortDate = (iso: string) => {
+          const [y, m, d] = iso.split("-");
+          const months = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+          const mName = months[(parseInt(m, 10) || 1) - 1] ?? m;
+          return `${parseInt(d, 10) || d} ${mName} ${y}`;
+        };
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="formula-title"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setFormulaModalOpen(false);
+            }}
+          >
+            <div className="w-full max-w-md rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5 shadow-2xl">
+              <div className="flex items-center justify-between gap-3">
+                <h2 id="formula-title" className="text-base font-extrabold text-[var(--text-primary)]">
+                  Cara Hitung Jatah Harian
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setFormulaModalOpen(false)}
+                  aria-label="Tutup rumus"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--text-muted)] hover:bg-[var(--bg-soft)]"
+                >
+                  <CloseIcon className="h-5 w-5" />
+                </button>
               </div>
-              <p className="text-[var(--text-muted)]">
-                Jika hari ini pengeluaranmu di bawah jatah harian, sisa uang otomatis membagi ulang sehingga jatah besok naik.
-              </p>
+
+              <div className="mt-3 space-y-3 text-xs leading-relaxed text-[var(--text-primary)] tabular-nums">
+                <div className="rounded-xl bg-[var(--bg-canvas)] p-3">
+                  <span className="font-bold">Rumus:</span>{" "}
+                  <span className="text-[var(--text-muted)]">
+                    (Target Budget &minus; Pengeluaran sebelum hari ini) &divide; Sisa hari di siklus
+                  </span>
+                </div>
+
+                <div className="space-y-2 rounded-xl border border-[var(--border-subtle)] p-3.5">
+                  <div className="flex items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-2 text-[11px] text-[var(--text-muted)]">
+                    <span>Periode siklus aktif</span>
+                    <span className="shrink-0 whitespace-nowrap font-bold text-[var(--text-primary)]">
+                      {formatShortDate(allowance.cycleStart)} &ndash; {formatShortDate(allowance.cycleEnd)}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-[var(--text-muted)]">Target anggaran siklus</span>
+                    <strong className="shrink-0 whitespace-nowrap text-right">
+                      {formatRupiah(db.settings.monthlyBudget)}
+                    </strong>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-[var(--text-muted)]">Terpakai sebelum hari ini</span>
+                    <strong className="shrink-0 whitespace-nowrap text-right">
+                      {formatRupiah(spentBeforeToday)}
+                    </strong>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-[var(--text-muted)]">Sisa hari di siklus</span>
+                    <strong className="shrink-0 whitespace-nowrap text-right">
+                      {allowance.daysLeftInCycle} hari
+                    </strong>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-4 border-t border-[var(--border-subtle)] pt-2">
+                    <span className="font-extrabold">Jatah aman hari ini</span>
+                    <strong className="shrink-0 whitespace-nowrap text-right text-sm font-extrabold text-[var(--brand-primary)] dark:text-[#fda4af]">
+                      {formatRupiah(allowance.dailyAllowance)}
+                    </strong>
+                  </div>
+
+                  {allowance.spentToday > 0 && (
+                    <div className="space-y-1.5 border-t border-dashed border-[var(--border-subtle)] pt-2">
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-[var(--text-muted)]">Terpakai hari ini</span>
+                        <strong className="shrink-0 whitespace-nowrap text-right">
+                          {formatRupiah(allowance.spentToday)}
+                        </strong>
+                      </div>
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="font-bold text-[var(--text-muted)]">Sisa jatah hari ini</span>
+                        <strong
+                          className={`shrink-0 whitespace-nowrap text-right ${
+                            allowance.remainingToday < 0
+                              ? "text-[var(--expense-text)]"
+                              : "text-[var(--income-text)]"
+                          }`}
+                        >
+                          {formatRupiah(allowance.remainingToday)}
+                        </strong>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  Jika pengeluaran hari ini di bawah jatah harian, sisa uang otomatis dibagi ulang sehingga jatah besok naik.
+                </p>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Target Baru Modal */}
       {goalModalOpen && (

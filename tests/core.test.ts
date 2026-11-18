@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import { parseIndonesianTransactionsLocal } from "../src/lib/ai-parser.ts";
+import {
+  buildGuriContextSummary,
+  formatAiErrorMessage,
+  normalizeRawAiDrafts,
+  parseIndonesianTransactionsLocal,
+  resolveGeminiModelChain,
+} from "../src/lib/ai-parser.ts";
 import {
   computeAccountBalances,
   computeDailyAllowance,
@@ -7,6 +13,7 @@ import {
   computeStreak,
   countElapsedDays,
 } from "../src/lib/finance.ts";
+import { buildIncrementalSyncPlan, chunkRows, SHEET_HEADERS } from "../src/lib/google-sheets.ts";
 import {
   deleteCategoryInDb,
   parseLegacyCsv,
@@ -266,7 +273,84 @@ function runTests() {
     ["c3"],
   );
 
-  console.log("ALL CORE TESTS PASSED (12/12)");
+  // 13. AI model fallback chain, draft normalization, and clear error messages
+  const chain = resolveGeminiModelChain("gemini-3.5-flash-lite", "gemini-3.5-flash-lite,gemini-3.1-flash-lite");
+  assert.deepEqual(chain, ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]);
+  assert.equal(resolveGeminiModelChain()[0], "gemini-3.5-flash-lite");
+
+  const aiOut = normalizeRawAiDrafts(
+    '```json\n[{"type":"Transfer","accountId":"acc-bank","toAccountId":"acc-cash","amount":150000,"note":"Tarik tunai"},{"type":"Keluar","amount":0,"note":"Invalid"}]\n```',
+    sampleAccounts,
+    "2026-11-18",
+  );
+  assert.equal(aiOut.length, 1);
+  assert.equal(aiOut[0].toAccountId, "acc-cash");
+  assert.equal(aiOut[0].date, "2026-11-18");
+  assert.equal(normalizeRawAiDrafts("not json", sampleAccounts).length, 0);
+
+  assert.match(
+    formatAiErrorMessage("rate_limit", { isReceipt: true, hasAnyKey: true }),
+    /rate limit/i,
+  );
+  assert.match(
+    formatAiErrorMessage("invalid_key", { isReceipt: true, hasAnyKey: true }),
+    /tidak valid/i,
+  );
+  assert.match(
+    formatAiErrorMessage("not_configured", { isReceipt: true, hasAnyKey: false }),
+    /GEMINI_API_KEY/,
+  );
+
+  // 14. Tanya Guri context summary packs verified totals and recent transactions
+  const guriSummary = JSON.parse(
+    buildGuriContextSummary(
+      {
+        settings: {
+          name: "Test",
+          monthlyBudget: 3_000_000,
+          paydayDay: 25,
+          plan: "free",
+          categoryPreset: "umum",
+        },
+        accounts: sampleAccounts,
+        categories: [],
+        goals: [{ id: "g1", name: "Laptop", targetAmount: 5_000_000, currentAmount: 500_000, createdAt: "" }],
+        transactions: txs,
+        sheetConnection: { configured: false, connected: false, sheetTabName: "Transaksi" },
+      },
+      now,
+    ),
+  );
+  assert.equal(guriSummary.ringkasanBulanIni.pemasukan, "Rp 3.000.000");
+  assert.equal(guriSummary.ringkasanBulanIni.pengeluaran, "Rp 20.000");
+  assert.equal(guriSummary.targetTabungan[0].nama, "Laptop");
+  assert.equal(guriSummary.transaksiTerbaru.length, 3);
+
+  // 15. Google Sheets incremental sync plan & chunking preserve row order safely
+  const emptyPlan = buildIncrementalSyncPlan([], [txs[0]], []);
+  assert.equal(emptyPlan.needsHeader, true);
+  assert.equal(emptyPlan.updates.length, 0);
+  assert.equal(emptyPlan.deleteRowIndices0BasedDesc.length, 0);
+  assert.equal(emptyPlan.appends.length, 1);
+
+  const txUpdate: Transaction = { ...txs[0], id: "uuid-1", sheetSyncStatus: "pending" };
+  const txAppend: Transaction = { ...txs[1], id: "uuid-5", sheetSyncStatus: "pending" };
+  const deltaPlan = buildIncrementalSyncPlan(
+    [SHEET_HEADERS[0], "uuid-1", "uuid-2", "uuid-3", "uuid-4"],
+    [txUpdate, txAppend],
+    ["uuid-2", "uuid-4", "uuid-1", "uuid-missing"],
+  );
+  assert.equal(deltaPlan.needsHeader, false);
+  assert.equal(deltaPlan.updates.length, 1);
+  assert.equal(deltaPlan.updates[0].rowNumber1Based, 2);
+  assert.equal(deltaPlan.updates[0].tx.id, "uuid-1");
+  assert.deepEqual(deltaPlan.deleteRowIndices0BasedDesc, [4, 2]);
+  assert.equal(deltaPlan.appends.length, 1);
+  assert.equal(deltaPlan.appends[0].id, "uuid-5");
+  assert.deepEqual(chunkRows([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
+  assert.deepEqual(chunkRows([], 2), []);
+
+  console.log("ALL CORE TESTS PASSED (15/15)");
 }
 
 runTests();

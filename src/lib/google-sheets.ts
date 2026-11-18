@@ -1,10 +1,26 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import type { Account, AppDatabase, SheetConnection, Transaction } from "./types";
+import type { Account, AppDatabase, SheetConnection, Transaction } from "./types.ts";
 
 const OAUTH_SCOPE = [
   "https://www.googleapis.com/auth/drive.file",
   "https://www.googleapis.com/auth/userinfo.email",
 ].join(" ");
+
+export const SHEET_HEADERS = [
+  "Transaction ID",
+  "Tanggal",
+  "Jenis",
+  "Kategori",
+  "Akun",
+  "Nominal",
+  "Keterangan",
+  "Diperbarui",
+];
+
+const FULL_SYNC_CHUNK_SIZE = 2500;
+
+// In-memory short-lived access token cache keyed by encrypted refresh token hash.
+const accessTokenCache = new Map<string, { token: string; expiresAt: number }>();
 
 function getEncryptionKey(): Buffer {
   const secret = process.env.APP_ENCRYPTION_SECRET || "catatcepat-dev-secret-change-in-production";
@@ -83,7 +99,22 @@ export async function exchangeCodeForTokens(code: string): Promise<{
   return { accessToken: data.access_token, refreshToken: data.refresh_token };
 }
 
-async function refreshAccessToken(encryptedRefreshToken: string): Promise<string> {
+function tokenCacheKey(encryptedRefreshToken: string): string {
+  return createHash("sha256").update(encryptedRefreshToken).digest("hex");
+}
+
+async function getAccessToken(
+  encryptedRefreshToken: string,
+  forceRefresh = false,
+): Promise<string> {
+  const key = tokenCacheKey(encryptedRefreshToken);
+  if (!forceRefresh) {
+    const cached = accessTokenCache.get(key);
+    if (cached && cached.expiresAt > Date.now() + 60_000) {
+      return cached.token;
+    }
+  }
+
   const refreshToken = decryptToken(encryptedRefreshToken);
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -96,10 +127,33 @@ async function refreshAccessToken(encryptedRefreshToken: string): Promise<string
     }),
   });
   if (!res.ok) {
+    accessTokenCache.delete(key);
     throw new Error("Refresh token Google kedaluwarsa atau dicabut");
   }
-  const data = (await res.json()) as { access_token: string };
+  const data = (await res.json()) as { access_token: string; expires_in?: number };
+  accessTokenCache.set(key, {
+    token: data.access_token,
+    expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000,
+  });
   return data.access_token;
+}
+
+async function fetchGoogleWithAuth(
+  encryptedRefreshToken: string,
+  url: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  let token = await getAccessToken(encryptedRefreshToken, false);
+  const withAuth = (t: string): RequestInit => ({
+    ...init,
+    headers: { ...(init.headers || {}), Authorization: `Bearer ${t}` },
+  });
+  let res = await fetch(url, withAuth(token));
+  if (res.status === 401) {
+    token = await getAccessToken(encryptedRefreshToken, true);
+    res = await fetch(url, withAuth(token));
+  }
+  return res;
 }
 
 export async function fetchGoogleUserEmail(accessToken: string): Promise<string | undefined> {
@@ -115,6 +169,7 @@ export async function fetchGoogleUserEmail(accessToken: string): Promise<string 
 export async function createCatatCepatSpreadsheet(accessToken: string): Promise<{
   spreadsheetId: string;
   spreadsheetUrl: string;
+  sheetTabId?: number;
 }> {
   const createRes = await fetch("https://sheets.googleapis.com/v4/spreadsheets", {
     method: "POST",
@@ -136,6 +191,7 @@ export async function createCatatCepatSpreadsheet(accessToken: string): Promise<
   const created = (await createRes.json()) as {
     spreadsheetId: string;
     spreadsheetUrl: string;
+    sheets?: Array<{ properties?: { sheetId?: number; title?: string } }>;
   };
 
   // Write canonical header row with Transaction UUID in column A
@@ -147,17 +203,14 @@ export async function createCatatCepatSpreadsheet(accessToken: string): Promise<
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        values: [
-          ["Transaction ID", "Tanggal", "Jenis", "Kategori", "Akun", "Nominal", "Keterangan", "Diperbarui"],
-        ],
-      }),
+      body: JSON.stringify({ values: [SHEET_HEADERS] }),
     },
   );
 
   return {
     spreadsheetId: created.spreadsheetId,
     spreadsheetUrl: created.spreadsheetUrl,
+    sheetTabId: created.sheets?.[0]?.properties?.sheetId,
   };
 }
 
@@ -179,7 +232,243 @@ export function transactionToSheetRow(tx: Transaction, accounts: Account[]): str
   ];
 }
 
-/** Push all local transactions cleanly to user's Google Sheet using Transaction ID upsert. */
+/** Split matrix rows into bounded chunks so large ledgers never hit Sheets payload limits. */
+export function chunkRows<T>(rows: T[], chunkSize: number = FULL_SYNC_CHUNK_SIZE): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < rows.length; i += chunkSize) {
+    chunks.push(rows.slice(i, i + chunkSize));
+  }
+  return chunks;
+}
+
+/**
+ * Plan incremental sheet mutations from column A UUIDs:
+ * 1) updates (using current row numbers before any shift),
+ * 2) deletes (sorted descending so row indices don't shift each other),
+ * 3) appends (brand-new UUIDs).
+ */
+export function buildIncrementalSyncPlan(
+  sheetColumnA: string[],
+  pendingTransactions: Transaction[],
+  pendingDeletes: string[],
+): {
+  needsHeader: boolean;
+  updates: Array<{ rowNumber1Based: number; tx: Transaction }>;
+  deleteRowIndices0BasedDesc: number[];
+  appends: Transaction[];
+} {
+  const needsHeader = sheetColumnA[0] !== SHEET_HEADERS[0];
+  const rowByUuid = new Map<string, number>();
+  for (let i = 1; i < sheetColumnA.length; i += 1) {
+    const id = (sheetColumnA[i] || "").trim();
+    if (id && !rowByUuid.has(id)) {
+      rowByUuid.set(id, i + 1); // 1-based sheet row
+    }
+  }
+
+  const activeIds = new Set(pendingTransactions.map((t) => t.id));
+  const updates: Array<{ rowNumber1Based: number; tx: Transaction }> = [];
+  const appends: Transaction[] = [];
+  for (const tx of pendingTransactions) {
+    const rowNum = rowByUuid.get(tx.id);
+    if (rowNum) {
+      updates.push({ rowNumber1Based: rowNum, tx });
+    } else {
+      appends.push(tx);
+    }
+  }
+
+  const deleteRowIndices0BasedDesc = Array.from(new Set(pendingDeletes))
+    .filter((id) => !activeIds.has(id))
+    .map((id) => rowByUuid.get(id))
+    .filter((rowNum): rowNum is number => typeof rowNum === "number")
+    .map((rowNum) => rowNum - 1) // 0-based for deleteDimension
+    .sort((a, b) => b - a);
+
+  return { needsHeader, updates, deleteRowIndices0BasedDesc, appends };
+}
+
+async function resolveSheetTabId(conn: SheetConnection): Promise<number> {
+  if (typeof conn.sheetTabId === "number") return conn.sheetTabId;
+  if (!conn.encryptedRefreshToken || !conn.spreadsheetId) return 0;
+  const tab = conn.sheetTabName || "Transaksi";
+  const res = await fetchGoogleWithAuth(
+    conn.encryptedRefreshToken,
+    `https://sheets.googleapis.com/v4/spreadsheets/${conn.spreadsheetId}?fields=sheets.properties`,
+  );
+  if (!res.ok) return 0;
+  const meta = (await res.json().catch(() => ({}))) as {
+    sheets?: Array<{ properties?: { sheetId?: number; title?: string } }>;
+  };
+  const found =
+    meta.sheets?.find((s) => s.properties?.title === tab)?.properties?.sheetId ??
+    meta.sheets?.[0]?.properties?.sheetId ??
+    0;
+  conn.sheetTabId = found;
+  return found;
+}
+
+async function readColumnA(conn: SheetConnection): Promise<string[]> {
+  if (!conn.encryptedRefreshToken || !conn.spreadsheetId) return [];
+  const tab = conn.sheetTabName || "Transaksi";
+  const res = await fetchGoogleWithAuth(
+    conn.encryptedRefreshToken,
+    `https://sheets.googleapis.com/v4/spreadsheets/${conn.spreadsheetId}/values/${encodeURIComponent(tab)}!A:A?majorDimension=COLUMNS`,
+  );
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Gagal membaca indeks Google Sheets: ${errText}`);
+  }
+  const data = (await res.json()) as { values?: string[][] };
+  return data.values?.[0] ?? [];
+}
+
+async function appendRows(
+  conn: SheetConnection,
+  rows: string[][],
+): Promise<void> {
+  if (!conn.encryptedRefreshToken || !conn.spreadsheetId || rows.length === 0) return;
+  const tab = conn.sheetTabName || "Transaksi";
+  for (const chunk of chunkRows(rows)) {
+    const res = await fetchGoogleWithAuth(
+      conn.encryptedRefreshToken,
+      `https://sheets.googleapis.com/v4/spreadsheets/${conn.spreadsheetId}/values/${encodeURIComponent(tab)}!A:H:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ values: chunk }),
+      },
+    );
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Gagal menambah baris ke Google Sheets: ${errText}`);
+    }
+  }
+}
+
+/**
+ * Incremental sync: only writes/updates/deletes pending UUID changes instead of
+ * rewriting the entire spreadsheet on every transaction.
+ */
+export async function syncPendingChangesToSheet(
+  conn: SheetConnection,
+  transactions: Transaction[],
+  accounts: Account[],
+  pendingDeletes: string[] = [],
+): Promise<{ syncedCount: number }> {
+  if (!conn.connected || !conn.encryptedRefreshToken || !conn.spreadsheetId) {
+    throw new Error("Google Sheets belum terhubung");
+  }
+
+  const pendingTxs = transactions.filter((t) => t.sheetSyncStatus !== "synced");
+  const cleanDeletes = Array.from(new Set(pendingDeletes));
+  if (pendingTxs.length === 0 && cleanDeletes.length === 0) {
+    return { syncedCount: 0 };
+  }
+
+  const tab = conn.sheetTabName || "Transaksi";
+  // Fast path: pure brand-new inserts on an already-initialized sheet need just 1 append call (0 reads).
+  const isPureAppend =
+    cleanDeletes.length === 0 &&
+    Boolean(conn.lastSyncedAt) &&
+    pendingTxs.every((t) => t.createdAt === t.updatedAt);
+
+  if (isPureAppend) {
+    await appendRows(
+      conn,
+      pendingTxs.map((tx) => transactionToSheetRow(tx, accounts)),
+    );
+    return { syncedCount: pendingTxs.length };
+  }
+
+  const colA = await readColumnA(conn);
+  const plan = buildIncrementalSyncPlan(colA, pendingTxs, cleanDeletes);
+
+  if (plan.needsHeader) {
+    const headerRes = await fetchGoogleWithAuth(
+      conn.encryptedRefreshToken,
+      `https://sheets.googleapis.com/v4/spreadsheets/${conn.spreadsheetId}/values/${encodeURIComponent(tab)}!A1:H1?valueInputOption=USER_ENTERED`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ values: [SHEET_HEADERS] }),
+      },
+    );
+    if (!headerRes.ok) {
+      const errText = await headerRes.text();
+      throw new Error(`Gagal menulis header Google Sheets: ${errText}`);
+    }
+  }
+
+  // 1. Update edited rows in-place before deleting any rows so row indices stay accurate.
+  if (plan.updates.length > 0) {
+    for (const chunk of chunkRows(plan.updates, 500)) {
+      const res = await fetchGoogleWithAuth(
+        conn.encryptedRefreshToken,
+        `https://sheets.googleapis.com/v4/spreadsheets/${conn.spreadsheetId}/values:batchUpdate`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            valueInputOption: "USER_ENTERED",
+            data: chunk.map(({ rowNumber1Based, tx }) => ({
+              range: `${tab}!A${rowNumber1Based}:H${rowNumber1Based}`,
+              values: [transactionToSheetRow(tx, accounts)],
+            })),
+          }),
+        },
+      );
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Gagal memperbarui baris Google Sheets: ${errText}`);
+      }
+    }
+  }
+
+  // 2. Delete removed transaction rows from bottom to top so upper indices stay untouched.
+  if (plan.deleteRowIndices0BasedDesc.length > 0) {
+    const sheetId = await resolveSheetTabId(conn);
+    const res = await fetchGoogleWithAuth(
+      conn.encryptedRefreshToken,
+      `https://sheets.googleapis.com/v4/spreadsheets/${conn.spreadsheetId}:batchUpdate`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requests: plan.deleteRowIndices0BasedDesc.map((rowIdx) => ({
+            deleteDimension: {
+              range: {
+                sheetId,
+                dimension: "ROWS",
+                startIndex: rowIdx,
+                endIndex: rowIdx + 1,
+              },
+            },
+          })),
+        }),
+      },
+    );
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Gagal menghapus baris Google Sheets: ${errText}`);
+    }
+  }
+
+  // 3. Append newly created rows.
+  if (plan.appends.length > 0) {
+    await appendRows(
+      conn,
+      plan.appends.map((tx) => transactionToSheetRow(tx, accounts)),
+    );
+  }
+
+  return { syncedCount: pendingTxs.length + plan.deleteRowIndices0BasedDesc.length };
+}
+
+/**
+ * Full chunked spreadsheet sync (writes new data FIRST, then clears leftover tail rows)
+ * so an interrupted network call never leaves the user's sheet blank.
+ */
 export async function syncTransactionsToSheet(
   conn: SheetConnection,
   transactions: Transaction[],
@@ -189,48 +478,49 @@ export async function syncTransactionsToSheet(
     throw new Error("Google Sheets belum terhubung");
   }
 
-  const accessToken = await refreshAccessToken(conn.encryptedRefreshToken);
   const tab = conn.sheetTabName || "Transaksi";
-  const rows = [
-    ["Transaction ID", "Tanggal", "Jenis", "Kategori", "Akun", "Nominal", "Keterangan", "Diperbarui"],
+  const allRows = [
+    SHEET_HEADERS,
     ...transactions.map((tx) => transactionToSheetRow(tx, accounts)),
   ];
 
-  // Clear and batch-replace values cleanly so UUID stays authoritative
-  await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${conn.spreadsheetId}/values/${encodeURIComponent(tab)}!A1:H:clear`,
-    {
-      method: "POST",
-      headers: { Authorization: `Bearer ${accessToken}` },
-    },
-  );
-
-  const updateRes = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${conn.spreadsheetId}/values/${encodeURIComponent(tab)}!A1?valueInputOption=USER_ENTERED`,
-    {
-      method: "PUT",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
+  let startRow = 1;
+  for (const chunk of chunkRows(allRows)) {
+    const endRow = startRow + chunk.length - 1;
+    const range = `${tab}!A${startRow}:H${endRow}`;
+    const updateRes = await fetchGoogleWithAuth(
+      conn.encryptedRefreshToken,
+      `https://sheets.googleapis.com/v4/spreadsheets/${conn.spreadsheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ values: chunk }),
       },
-      body: JSON.stringify({ values: rows }),
-    },
-  );
-
-  if (!updateRes.ok) {
-    const errText = await updateRes.text();
-    throw new Error(`Gagal sinkron ke Google Sheets: ${errText}`);
+    );
+    if (!updateRes.ok) {
+      const errText = await updateRes.text();
+      throw new Error(`Gagal sinkron ke Google Sheets: ${errText}`);
+    }
+    startRow = endRow + 1;
   }
+
+  // Clear only surplus rows below the written range (if the sheet previously had more rows).
+  await fetchGoogleWithAuth(
+    conn.encryptedRefreshToken,
+    `https://sheets.googleapis.com/v4/spreadsheets/${conn.spreadsheetId}/values/${encodeURIComponent(tab)}!A${allRows.length + 1}:H:clear`,
+    { method: "POST" },
+  );
 
   return { syncedCount: transactions.length };
 }
 
-/** Sync transactions to Google Sheets if connected, recording any error on the connection without failing local writes. */
+/** Legacy synchronous helper kept only if explicit immediate full sync is needed. */
 export async function tryAutoSync(db: AppDatabase): Promise<void> {
   if (!db.sheetConnection.connected) return;
   try {
     await syncTransactionsToSheet(db.sheetConnection, db.transactions, db.accounts);
     db.transactions = db.transactions.map((tx) => ({ ...tx, sheetSyncStatus: "synced" }));
+    db.sheetConnection.pendingDeletes = [];
     db.sheetConnection.lastSyncedAt = new Date().toISOString();
     db.sheetConnection.lastError = undefined;
   } catch (err) {

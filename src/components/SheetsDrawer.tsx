@@ -9,6 +9,7 @@ interface SheetsDrawerProps {
   db: AppDatabase;
   onClose: () => void;
   onStateUpdated: (next: AppDatabase) => void;
+  onTriggerSync?: (full?: boolean) => Promise<void> | void;
   onNotify: (msg: string) => void;
 }
 
@@ -17,6 +18,7 @@ export function SheetsDrawer({
   db,
   onClose,
   onStateUpdated,
+  onTriggerSync,
   onNotify,
 }: SheetsDrawerProps) {
   const [budgetText, setBudgetText] = useState(String(db.settings.monthlyBudget));
@@ -110,11 +112,15 @@ export function SheetsDrawer({
     }
   };
 
-  const handleSyncOrPreview = async () => {
+  const handleSyncOrPreview = async (full = false) => {
     setBusy(true);
     setErrorMsg(null);
     try {
-      const res = await fetch("/api/sheets/sync", { method: "POST" });
+      const res = await fetch("/api/sheets/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ full }),
+      });
       const data = (await res.json().catch(() => ({}))) as {
         mode?: "preview" | "live";
         previewRows?: string[][];
@@ -122,12 +128,21 @@ export function SheetsDrawer({
         state?: AppDatabase;
         error?: string;
       };
+      if (data.state) {
+        onStateUpdated(data.state);
+      }
       if (!res.ok) throw new Error(data.error || "Gagal sinkronisasi.");
       if (data.mode === "preview" && data.previewRows) {
         setPreviewRows(data.previewRows);
       } else if (data.state) {
-        onStateUpdated(data.state);
-        onNotify(`Berhasil sinkron ${data.syncedCount ?? 0} transaksi ke Google Sheets.`);
+        const count = data.syncedCount ?? 0;
+        if (full) {
+          onNotify(`Sinkronisasi ulang penuh selesai (${count} baris).`);
+        } else if (count === 0) {
+          onNotify("Semua data sudah tersinkron dengan Google Sheets.");
+        } else {
+          onNotify(`Berhasil sinkron ${count} perubahan ke Google Sheets.`);
+        }
       }
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Gagal sinkron.");
@@ -175,6 +190,9 @@ export function SheetsDrawer({
       onStateUpdated(data.state);
       setCsvText("");
       onNotify(`Berhasil mengimpor ${data.importedCount} transaksi dari CSV.`);
+      if (data.state.sheetConnection.connected) {
+        void onTriggerSync?.(false);
+      }
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Gagal mengimpor CSV.");
     } finally {
@@ -196,6 +214,9 @@ export function SheetsDrawer({
       onStateUpdated(next);
       setConfirmClear(false);
       onNotify("Semua transaksi dan target dibersihkan.");
+      if (next.sheetConnection.connected) {
+        void onTriggerSync?.(true);
+      }
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Gagal menghapus semua data.");
     } finally {
@@ -204,6 +225,13 @@ export function SheetsDrawer({
   };
 
   const { sheetConnection } = db;
+  const pendingTxCount = sheetConnection.connected
+    ? db.transactions.filter((t) => t.sheetSyncStatus === "pending").length
+    : 0;
+  const pendingDeleteCount = sheetConnection.connected
+    ? (sheetConnection.pendingDeletes?.length ?? 0)
+    : 0;
+  const totalPendingCount = pendingTxCount + pendingDeleteCount;
 
   return (
     <div
@@ -280,6 +308,32 @@ export function SheetsDrawer({
               </div>
             )}
 
+            {sheetConnection.connected && (
+              <div className="mt-2.5 space-y-1.5 text-[11px]">
+                {totalPendingCount > 0 ? (
+                  <p className="rounded-lg bg-[var(--bg-soft)] px-2.5 py-1.5 font-bold text-[var(--brand-primary)] dark:text-[#fda4af]">
+                    Menunggu sinkronisasi: {pendingTxCount} transaksi, {pendingDeleteCount} hapus
+                  </p>
+                ) : (
+                  <p className="text-[var(--text-muted)]">
+                    Semua perubahan tersinkron
+                    {sheetConnection.lastSyncedAt
+                      ? ` (${new Date(sheetConnection.lastSyncedAt).toLocaleString("id-ID")})`
+                      : ""}
+                    .
+                  </p>
+                )}
+                {sheetConnection.lastError && (
+                  <p
+                    role="alert"
+                    className="rounded-lg bg-[var(--expense-bg)] px-2.5 py-1.5 font-bold text-[var(--expense-text)]"
+                  >
+                    Sync terakhir terkendala: {sheetConnection.lastError}
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="mt-3 flex flex-wrap gap-2">
               {!sheetConnection.connected ? (
                 <button
@@ -304,11 +358,22 @@ export function SheetsDrawer({
               <button
                 type="button"
                 disabled={busy}
-                onClick={handleSyncOrPreview}
-                className="min-h-[42px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-4 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
+                onClick={() => handleSyncOrPreview(false)}
+                className="min-h-[42px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-4 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)] disabled:opacity-60"
               >
                 {sheetConnection.connected ? "Sinkron Sekarang" : "Lihat Pratinjau Baris UUID"}
               </button>
+
+              {sheetConnection.connected && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => handleSyncOrPreview(true)}
+                  className="min-h-[42px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-4 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--bg-soft)] hover:text-[var(--text-primary)] disabled:opacity-60"
+                >
+                  Sinkron Ulang Penuh
+                </button>
+              )}
             </div>
 
             {previewRows && (

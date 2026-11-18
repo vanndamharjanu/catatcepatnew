@@ -127,6 +127,7 @@ export function TransactionSheet({
   const [aiText, setAiText] = useState("");
   const [aiDrafts, setAiDrafts] = useState<ParsedTransactionDraft[]>([]);
   const [aiEngine, setAiEngine] = useState<string | null>(null);
+  const [aiWarning, setAiWarning] = useState<string | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
@@ -204,6 +205,7 @@ export function TransactionSheet({
       setNote("");
       setAiDrafts([]);
       setAiEngine(null);
+      setAiWarning(null);
     }
   }, [open, editingTx, initialTab, initialType, initialAccountId, accounts, categories]);
 
@@ -522,13 +524,14 @@ export function TransactionSheet({
     }
     setAiBusy(true);
     setAiError(null);
+    setAiWarning(null);
     try {
       const res = await fetch("/api/ai/parse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: "parse",
-          text: aiText,
+          text: opts?.imageBase64 ? "" : aiText,
           imageBase64: opts?.imageBase64,
           mimeType: opts?.mimeType,
         }),
@@ -536,6 +539,7 @@ export function TransactionSheet({
       const data = (await res.json().catch(() => ({}))) as {
         drafts?: ParsedTransactionDraft[];
         engine?: string;
+        warning?: string;
         error?: string;
       };
       if (!res.ok || !data.drafts) {
@@ -545,6 +549,7 @@ export function TransactionSheet({
       }
       setAiDrafts(data.drafts);
       setAiEngine(data.engine || "local-parser");
+      setAiWarning(data.warning || null);
     } catch {
       setAiError("Gagal menghubungi layanan parser. Coba ulangi.");
     } finally {
@@ -1278,14 +1283,15 @@ export function TransactionSheet({
               />
               <button
                 type="button"
+                disabled={aiBusy}
                 onClick={() => fileInputRef.current?.click()}
-                className="flex min-h-[44px] w-full items-center justify-between rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-4 py-2.5 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
+                className="flex min-h-[44px] w-full items-center justify-between rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-4 py-2.5 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)] disabled:opacity-60"
               >
                 <span className="flex items-center gap-2">
                   <CameraIcon className="h-4 w-4 text-[var(--brand-primary)] dark:text-[#fda4af]" />
-                  Upload atau Foto Struk Belanja
+                  {aiBusy ? "Membaca struk..." : "Upload atau Foto Struk Belanja"}
                 </span>
-                <span className="text-[11px] text-[var(--text-muted)]">Butuh Gemini API Key</span>
+                <span className="text-[11px] text-[var(--text-muted)]">AI Vision</span>
               </button>
 
               {/* Voice dictation button */}
@@ -1361,9 +1367,15 @@ export function TransactionSheet({
                       Hasil Deteksi ({aiDrafts.length} transaksi)
                     </span>
                     <span className="rounded-lg bg-[var(--bg-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--text-muted)]">
-                      {aiEngine === "gemini" ? "Gemini AI" : "Parser Lokal"}
+                      {aiEngine === "gemini" || aiEngine === "gateway" ? "Guri AI" : "Parser Lokal"}
                     </span>
                   </div>
+
+                  {aiWarning && (
+                    <p className="rounded-xl bg-[#FEF3C7] px-3 py-2 text-[11px] font-semibold text-[#92400E] dark:bg-[#451A03] dark:text-[#FDE68A]">
+                      {aiWarning}
+                    </p>
+                  )}
 
                   {aiDrafts.map((draft) => {
                     const accName =

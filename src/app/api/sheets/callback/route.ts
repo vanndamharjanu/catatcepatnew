@@ -31,11 +31,13 @@ export async function GET(request: Request) {
       spreadsheetId: sheet.spreadsheetId,
       spreadsheetUrl: sheet.spreadsheetUrl,
       sheetTabName: "Transaksi",
+      sheetTabId: sheet.sheetTabId,
       encryptedRefreshToken: refreshToken
         ? encryptToken(refreshToken)
         : db.sheetConnection.encryptedRefreshToken,
       lastSyncedAt: new Date().toISOString(),
       lastError: undefined,
+      pendingDeletes: [],
     };
 
     if (db.transactions.length > 0 && db.sheetConnection.encryptedRefreshToken) {

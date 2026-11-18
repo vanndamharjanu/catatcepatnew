@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { tryAutoSync } from "@/lib/google-sheets";
 import { toIsoDate } from "@/lib/finance";
 import { readDb, toPublicState, writeDb } from "@/lib/store";
 
@@ -49,7 +48,6 @@ export async function POST(request: Request) {
         updatedAt: nowIso,
       });
 
-      await tryAutoSync(db);
       writeDb(db);
       return NextResponse.json(toPublicState(db), { status: 201 });
     }
@@ -91,10 +89,16 @@ export async function DELETE(request: Request) {
   const db = readDb();
   db.goals = db.goals.filter((g) => g.id !== id);
   // Deleting a goal cancels its deposits so the money returns to the source account balance.
-  const before = db.transactions.length;
-  db.transactions = db.transactions.filter((t) => t.goalId !== id);
-  if (db.transactions.length !== before) {
-    await tryAutoSync(db);
+  const removedDepositIds = db.transactions
+    .filter((t) => t.goalId === id)
+    .map((t) => t.id);
+  if (removedDepositIds.length > 0) {
+    db.transactions = db.transactions.filter((t) => t.goalId !== id);
+    if (db.sheetConnection.connected) {
+      db.sheetConnection.pendingDeletes = Array.from(
+        new Set([...(db.sheetConnection.pendingDeletes ?? []), ...removedDepositIds]),
+      );
+    }
   }
   writeDb(db);
   return NextResponse.json(toPublicState(db));

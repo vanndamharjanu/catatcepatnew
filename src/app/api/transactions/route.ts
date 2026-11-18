@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { computeAccountBalances, formatRupiah, toIsoDate } from "@/lib/finance";
-import { tryAutoSync } from "@/lib/google-sheets";
 import { readDb, toPublicState, writeDb } from "@/lib/store";
 import type { Account, Transaction, TransactionSource, TransactionType } from "@/lib/types";
 
@@ -103,7 +102,6 @@ export async function POST(request: Request) {
       };
 
       db.transactions.unshift(reconciliationTx);
-      await tryAutoSync(db);
       writeDb(db);
       return NextResponse.json(toPublicState(db), { status: 201 });
     }
@@ -131,7 +129,6 @@ export async function POST(request: Request) {
     }
 
     db.transactions = [...created, ...db.transactions];
-    await tryAutoSync(db);
     writeDb(db);
 
     return NextResponse.json(toPublicState(db), { status: 201 });
@@ -169,7 +166,6 @@ export async function PATCH(request: Request) {
       updatedAt: new Date().toISOString(),
     };
 
-    await tryAutoSync(db);
     writeDb(db);
     return NextResponse.json(toPublicState(db));
   } catch (err) {
@@ -195,7 +191,12 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "Transaksi tidak ditemukan." }, { status: 404 });
     }
 
-    await tryAutoSync(db);
+    if (db.sheetConnection.connected) {
+      db.sheetConnection.pendingDeletes = Array.from(
+        new Set([...(db.sheetConnection.pendingDeletes ?? []), id]),
+      );
+    }
+
     writeDb(db);
     return NextResponse.json(toPublicState(db));
   } catch (err) {

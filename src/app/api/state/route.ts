@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { tryAutoSync } from "@/lib/google-sheets";
 import {
   ALLOWED_CATEGORY_ICONS,
   buildPresetCategoryList,
@@ -49,6 +48,7 @@ export async function PATCH(request: Request) {
     if (body.action === "clear_all_data") {
       db.transactions = [];
       db.goals = [];
+      db.sheetConnection.pendingDeletes = [];
       writeDb(db);
       return NextResponse.json(toPublicState(db));
     }
@@ -88,7 +88,6 @@ export async function PATCH(request: Request) {
       if (!result.ok) {
         return NextResponse.json({ error: result.error }, { status: result.status });
       }
-      if (result.transactionsChanged) await tryAutoSync(db);
       writeDb(db);
       return NextResponse.json(toPublicState(db));
     }
@@ -105,17 +104,6 @@ export async function PATCH(request: Request) {
 
     if (body.action === "delete_category" && body.categoryId) {
       const result = deleteCategoryInDb(db, body.categoryId, body.replacementCategory);
-      if (!result.ok) {
-        return NextResponse.json({ error: result.error }, { status: result.status });
-      }
-      if (result.transactionsChanged) await tryAutoSync(db);
-      writeDb(db);
-      return NextResponse.json(toPublicState(db));
-    }
-
-    if (body.action === "reorder_categories" && Array.isArray(body.orderedIds)) {
-      const catType = body.categoryType === "Masuk" ? "Masuk" : "Keluar";
-      const result = reorderCategoriesInDb(db, catType, body.orderedIds);
       if (!result.ok) {
         return NextResponse.json({ error: result.error }, { status: result.status });
       }

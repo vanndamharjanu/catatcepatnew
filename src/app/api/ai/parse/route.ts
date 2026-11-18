@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { parseIndonesianTransactionsLocal, parseWithGemini } from "@/lib/ai-parser";
+import {
+  askGuriWithAI,
+  formatAiErrorMessage,
+  parseIndonesianTransactionsLocal,
+  parseWithAI,
+} from "@/lib/ai-parser";
 import { answerFinancialQuestion } from "@/lib/finance";
 import { readDb } from "@/lib/store";
 
@@ -16,64 +21,100 @@ export async function POST(request: Request) {
     const db = readDb();
 
     if (body.mode === "ask") {
+      const question = (body.question || "").trim();
+      if (question && db.transactions.length > 0) {
+        const aiAsk = await askGuriWithAI(question, db);
+        if (aiAsk.answer) {
+          return NextResponse.json({
+            answer: aiAsk.answer,
+            engine: aiAsk.engine,
+          });
+        }
+        const fallbackAnswer = answerFinancialQuestion(
+          question,
+          db.transactions,
+          db.accounts,
+          db.settings.monthlyBudget,
+          db.settings.paydayDay,
+        );
+        const warning =
+          aiAsk.errorKind && aiAsk.errorKind !== "not_configured" && aiAsk.errorKind !== "unreadable"
+            ? `AI sedang tidak tersedia (${aiAsk.errorDetail || aiAsk.errorKind}); jawaban dihitung lokal.`
+            : undefined;
+        return NextResponse.json({ answer: fallbackAnswer, engine: "local", warning });
+      }
+
       const answer = answerFinancialQuestion(
-        body.question || "",
+        question,
         db.transactions,
         db.accounts,
         db.settings.monthlyBudget,
         db.settings.paydayDay,
       );
-      return NextResponse.json({ answer });
+      return NextResponse.json({ answer, engine: "local" });
     }
 
     const categoriesKeluar = db.categories.filter((c) => c.type === "Keluar").map((c) => c.name);
     const categoriesMasuk = db.categories.filter((c) => c.type === "Masuk").map((c) => c.name);
 
-    // Try Gemini API first when GEMINI_API_KEY is configured
-    if (process.env.GEMINI_API_KEY) {
-      try {
-        const geminiDrafts = await parseWithGemini({
-          text: body.text,
-          imageBase64: body.imageBase64,
-          mimeType: body.mimeType,
-          accounts: db.accounts,
-          categoriesKeluar,
-          categoriesMasuk,
-        });
-        if (geminiDrafts && geminiDrafts.length > 0) {
-          return NextResponse.json({ drafts: geminiDrafts, engine: "gemini" });
-        }
-      } catch {
-        // Fall back transparently to local parser below
-      }
+    const aiOutcome = await parseWithAI({
+      text: body.text,
+      imageBase64: body.imageBase64,
+      mimeType: body.mimeType,
+      accounts: db.accounts,
+      categoriesKeluar,
+      categoriesMasuk,
+    });
+
+    if (aiOutcome.drafts.length > 0) {
+      return NextResponse.json({
+        drafts: aiOutcome.drafts,
+        engine: aiOutcome.engine,
+      });
     }
 
+    const hasAnyKey = aiOutcome.errorKind !== "not_configured";
+    const statusMap = {
+      not_configured: 400,
+      invalid_key: 401,
+      rate_limit: 429,
+      unavailable: 503,
+      unreadable: 422,
+    } as const;
+
     if (body.imageBase64 && !body.text) {
+      const kind = aiOutcome.errorKind || "unreadable";
       return NextResponse.json(
         {
-          error:
-            "Scan gambar struk membutuhkan GEMINI_API_KEY di .env.local. Untuk uji coba sekarang, ketik atau ucapkan nominal transaksi secara langsung.",
+          error: formatAiErrorMessage(kind, { isReceipt: true, hasAnyKey }),
+          errorKind: kind,
           drafts: [],
           engine: "local-parser",
         },
-        { status: 400 },
+        { status: statusMap[kind] },
       );
     }
 
     const drafts = parseIndonesianTransactionsLocal(body.text || "", db.accounts);
     if (drafts.length === 0) {
+      const kind = aiOutcome.errorKind || "unreadable";
       return NextResponse.json(
         {
-          error:
-            "Belum ditemukan nominal transaksi. Contoh format: 'Ngopi 25rb pake gopay, parkir 2rb cash'.",
+          error: formatAiErrorMessage(kind, { isReceipt: false, hasAnyKey }),
+          errorKind: kind,
           drafts: [],
           engine: "local-parser",
         },
-        { status: 400 },
+        { status: hasAnyKey && kind !== "unreadable" ? statusMap[kind] : 400 },
       );
     }
 
-    return NextResponse.json({ drafts, engine: "local-parser" });
+    const warning =
+      hasAnyKey && aiOutcome.errorKind && aiOutcome.errorKind !== "unreadable"
+        ? `AI utama gagal (${aiOutcome.errorDetail || aiOutcome.errorKind}); hasil diproses memakai Parser Lokal.`
+        : undefined;
+
+    return NextResponse.json({ drafts, engine: "local-parser", warning });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Gagal memproses input AI." },
