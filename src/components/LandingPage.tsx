@@ -1,12 +1,27 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { readBrowserDemoExport } from "@/lib/client-demo";
 import { formatDisplayDate, formatRupiah, toIsoDate } from "@/lib/finance";
-import { APP_SLOGAN, type AppDatabase, type ThemeKey } from "@/lib/types";
-import { CloseIcon, ThemeIcon } from "./Icons";
+import { parseIndonesianTransactionsLocal } from "@/lib/local-parser";
+import { APP_SLOGAN, type Account, type AppDatabase, type ThemeKey } from "@/lib/types";
+import {
+  CameraIcon,
+  ChartIcon,
+  CloseIcon,
+  PlusIcon,
+  ScaleIcon,
+  ThemeIcon,
+} from "./Icons";
 import { OctopusMascot } from "./OctopusMascot";
 import { ThemeDots } from "./ThemeDots";
+
+const PREVIEW_ACCOUNTS: Account[] = [
+  { id: "acc-cash", name: "Tunai", kind: "cash", initialBalance: 0 },
+  { id: "acc-bank", name: "Rekening Bank", kind: "bank", initialBalance: 0 },
+  { id: "acc-ewallet", name: "E-Wallet", kind: "ewallet", initialBalance: 0 },
+];
 
 interface LandingPageProps {
   db: AppDatabase;
@@ -30,50 +45,16 @@ const CHAT_EXAMPLES = [
     id: "kopi",
     label: "Jajan & Parkir",
     prompt: "Ngopi 25rb pake ewallet, parkir 2rb tunai",
-    rows: [
-      {
-        category: "Makan & Minum",
-        note: "Ngopi",
-        account: "E-Wallet",
-        type: "Keluar" as const,
-        amount: 25_000,
-      },
-      {
-        category: "Transportasi & Bensin",
-        note: "Parkir",
-        account: "Tunai",
-        type: "Keluar" as const,
-        amount: 2_000,
-      },
-    ],
   },
   {
     id: "gaji",
     label: "Gaji Masuk",
     prompt: "Gajian 5,2 juta masuk rekening bank",
-    rows: [
-      {
-        category: "Gaji",
-        note: "Gajian",
-        account: "Rekening Bank",
-        type: "Masuk" as const,
-        amount: 5_200_000,
-      },
-    ],
   },
   {
-    id: "belanja",
-    label: "Belanja Harian",
-    prompt: "Belanja kebutuhan rumah 145rb qris",
-    rows: [
-      {
-        category: "Belanja",
-        note: "Belanja kebutuhan rumah",
-        account: "E-Wallet",
-        type: "Keluar" as const,
-        amount: 145_000,
-      },
-    ],
+    id: "diskon",
+    label: "Belanja Diskon",
+    prompt: "Beli telur 100rb diskon 10rb cash",
   },
 ];
 
@@ -92,20 +73,29 @@ export function LandingPage({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [migrateLocal, setMigrateLocal] = useState(false);
+  const [localDemoCount, setLocalDemoCount] = useState(0);
   const [busy, setBusy] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(initialError || null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
   const [sampleIdx, setSampleIdx] = useState(0);
-  const [chatExampleIdx, setChatExampleIdx] = useState(0);
+  const [livePreviewText, setLivePreviewText] = useState(CHAT_EXAMPLES[0].prompt);
 
   const activeSample = SAMPLE_BUDGETS[sampleIdx] ?? SAMPLE_BUDGETS[0];
   const sampleRemaining = Math.max(0, activeSample.budget - activeSample.spent);
   const sampleDailyAllowance = Math.floor(
     sampleRemaining / activeSample.daysLeft,
   );
-  const activeChatExample = CHAT_EXAMPLES[chatExampleIdx] ?? CHAT_EXAMPLES[0];
   const todayDisplay = formatDisplayDate(toIsoDate());
+
+  const liveDrafts = useMemo(
+    () => parseIndonesianTransactionsLocal(livePreviewText, PREVIEW_ACCOUNTS),
+    [livePreviewText],
+  );
+
+  useEffect(() => {
+    setLocalDemoCount(readBrowserDemoExport().transactions.length);
+  }, [authModalOpen]);
 
   useEffect(() => {
     if (!authModalOpen) return;
@@ -151,6 +141,7 @@ export function LandingPage({
     setErrorMsg(null);
     setInfoMsg(null);
     try {
+      const localExport = migrateLocal ? readBrowserDemoExport() : { transactions: [], goals: [] };
       const res = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -159,6 +150,8 @@ export function LandingPage({
           email,
           password,
           migrateLocal,
+          localTransactions: localExport.transactions,
+          localGoals: localExport.goals,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as {
@@ -216,7 +209,10 @@ export function LandingPage({
             className="hidden items-center gap-5 text-xs font-bold text-[var(--text-muted)] md:flex"
           >
             <a href="#pratinjau" className="hover:text-[var(--text-primary)]">
-              Catat Cepat
+              Coba Catat
+            </a>
+            <a href="#fitur" className="hover:text-[var(--text-primary)]">
+              Fitur
             </a>
             <a
               href="#jatah-harian"
@@ -260,9 +256,9 @@ export function LandingPage({
                   Tahu sisa jatah belanja hari ini sebelum gaji habis.
                 </h1>
                 <p className="mt-3 max-w-xl text-sm leading-relaxed text-[var(--text-muted)] sm:text-base">
-                  Catat pemasukan dan pengeluaran dalam hitungan detik lewat
-                  input cepat, suara, atau foto struk. Rapi otomatis di Google
-                  Sheets pribadi Anda.
+                  Tanpa ribet zoom-in spreadsheet di HP. Catat 3 detik lewat form
+                  1-layar, suara, atau foto struk; otomatis rapi di Google Sheets
+                  pribadi Anda.
                 </p>
               </div>
 
@@ -288,17 +284,17 @@ export function LandingPage({
               </div>
             </div>
 
-            {/* Interactive Preview Card */}
+            {/* Live Interactive Parser Preview Card */}
             <div id="pratinjau" className="min-w-0 lg:col-span-6">
               <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5 shadow-md sm:p-6">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <h2 className="text-base font-extrabold text-[var(--text-primary)]">
-                      Pratinjau Catat Cepat
+                      Coba Ketik Transaksi Sekarang
                     </h2>
                     <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-                      Pilih contoh di bawah untuk melihat hasil draf
-                      otomatisnya.
+                      Ketik kalimat bebas atau klik contoh di bawah untuk
+                      melihat pemisahan otomatisnya.
                     </p>
                   </div>
                 </div>
@@ -308,60 +304,164 @@ export function LandingPage({
                   aria-label="Pilih contoh kalimat transaksi"
                   className="mt-3.5 flex flex-wrap gap-2"
                 >
-                  {CHAT_EXAMPLES.map((item, idx) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => setChatExampleIdx(idx)}
-                      aria-pressed={chatExampleIdx === idx}
-                      className={`min-h-[38px] rounded-xl px-3 text-xs font-bold transition-colors ${
-                        chatExampleIdx === idx
-                          ? "bg-[var(--brand-primary)] text-white"
-                          : "border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
-                      }`}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
+                  {CHAT_EXAMPLES.map((item) => {
+                    const active = livePreviewText.trim() === item.prompt;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setLivePreviewText(item.prompt)}
+                        aria-pressed={active}
+                        className={`min-h-[38px] rounded-xl px-3 text-xs font-bold transition-colors ${
+                          active
+                            ? "bg-[var(--brand-primary)] text-white"
+                            : "border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    );
+                  })}
                 </div>
 
                 <div className="mt-4 space-y-2.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-4">
                   <div>
-                    <span className="text-[11px] font-bold text-[var(--text-muted)]">
-                      Input Anda:
-                    </span>
-                    <p className="mt-0.5 text-sm font-extrabold text-[var(--text-primary)]">
-                      &ldquo;{activeChatExample.prompt}&rdquo;
-                    </p>
+                    <label
+                      htmlFor="landing-live-try"
+                      className="block text-[11px] font-bold text-[var(--text-muted)]"
+                    >
+                      Coba ketik sendiri (pisahkan dengan koma untuk multi-transaksi):
+                    </label>
+                    <input
+                      id="landing-live-try"
+                      type="text"
+                      value={livePreviewText}
+                      onChange={(e) => setLivePreviewText(e.target.value)}
+                      placeholder="Contoh: Bakso 22rb cash, parkir 2rb"
+                      className="mt-1.5 min-h-[42px] w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 text-sm font-bold text-[var(--text-primary)]"
+                    />
                   </div>
 
                   <div className="space-y-2 pt-1">
-                    {activeChatExample.rows.map((row) => (
-                      <div
-                        key={`${row.category}-${row.note}`}
-                        className="flex items-center justify-between gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3.5 py-2.5"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-xs font-extrabold text-[var(--text-primary)]">
-                            {row.note}
-                          </p>
-                          <p className="text-[11px] font-semibold text-[var(--text-muted)]">
-                            {row.category} · {row.account}
-                          </p>
-                        </div>
-                        <span
-                          className={`shrink-0 text-xs font-extrabold tabular-nums ${
-                            row.type === "Masuk"
-                              ? "text-[var(--income-text)]"
-                              : "text-[var(--expense-text)]"
-                          }`}
-                        >
-                          {row.type === "Masuk" ? "+" : "-"}
-                          {formatRupiah(row.amount)}
-                        </span>
-                      </div>
-                    ))}
+                    {liveDrafts.length > 0 ? (
+                      liveDrafts.slice(0, 3).map((row) => {
+                        const accLabel =
+                          PREVIEW_ACCOUNTS.find((a) => a.id === row.accountId)
+                            ?.name || "Tunai";
+                        return (
+                          <div
+                            key={row.tempId}
+                            className="flex items-center justify-between gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3.5 py-2.5"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-extrabold text-[var(--text-primary)]">
+                                {row.note}
+                              </p>
+                              <p className="text-[11px] font-semibold text-[var(--text-muted)]">
+                                {row.category} · {accLabel}
+                              </p>
+                            </div>
+                            <span
+                              className={`shrink-0 text-xs font-extrabold tabular-nums ${
+                                row.type === "Masuk"
+                                  ? "text-[var(--income-text)]"
+                                  : "text-[var(--expense-text)]"
+                              }`}
+                            >
+                              {row.type === "Masuk" ? "+" : "-"}
+                              {formatRupiah(row.amount)}
+                            </span>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <p className="rounded-xl bg-[var(--bg-card)] px-3 py-2.5 text-xs text-[var(--text-muted)]">
+                        Tulis nominal seperti &ldquo;25rb&rdquo; atau &ldquo;15000&rdquo; untuk melihat hasil draf otomatis.
+                      </p>
+                    )}
                   </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Feature Highlights Strip: Distinct 2x2 capability layout covering real app tools */}
+          <section
+            id="fitur"
+            className="mt-8 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5 sm:p-6"
+          >
+            <div className="flex flex-wrap items-end justify-between gap-2 border-b border-[var(--border-subtle)] pb-4">
+              <div>
+                <h2 className="text-base font-extrabold text-[var(--text-primary)] sm:text-lg">
+                  Lengkap di Dalam, Tetap Ringkas di Layar HP
+                </h2>
+                <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                  Semua alat pencatatan harian tersedia dan bisa langsung dicoba di Mode Demo.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onEnterDemo}
+                className="min-h-[38px] rounded-xl bg-[var(--bg-soft)] px-3.5 text-xs font-extrabold text-[var(--brand-primary)] hover:bg-[var(--bg-soft-hover)] dark:text-[#fda4af]"
+              >
+                Buka Mode Demo
+              </button>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--bg-soft)] text-[var(--brand-primary)] dark:text-[#fda4af]">
+                  <PlusIcon className="h-5 w-5" />
+                </span>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-extrabold text-[var(--text-primary)]">
+                    Input 1-Layar &amp; 6 Tema Warna
+                  </h3>
+                  <p className="mt-0.5 text-xs leading-relaxed text-[var(--text-muted)]">
+                    Tombol nominal cepat (+500 s.d. +500rb), kategori berikon yang bisa diatur sendiri, serta ganti warna tema seketika.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--bg-soft)] text-[var(--brand-primary)] dark:text-[#fda4af]">
+                  <CameraIcon className="h-5 w-5" />
+                </span>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-extrabold text-[var(--text-primary)]">
+                    Scan Foto Struk, Suara &amp; Offline (PWA)
+                  </h3>
+                  <p className="mt-0.5 text-xs leading-relaxed text-[var(--text-muted)]">
+                    Pasang di layar utama HP tanpa instal aplikasi berat. Catatan saat sinyal hilang masuk antrean offline otomatis.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--bg-soft)] text-[var(--brand-primary)] dark:text-[#fda4af]">
+                  <ScaleIcon className="h-5 w-5" />
+                </span>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-extrabold text-[var(--text-primary)]">
+                    Multi-Dompet, Koreksi Saldo &amp; Rutin
+                  </h3>
+                  <p className="mt-0.5 text-xs leading-relaxed text-[var(--text-muted)]">
+                    Tambah dompet kustom (BCA, GoPay, Kas), cocokkan saldo nyata 1 klik, dan catat tagihan/gaji rutin tiap bulan.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--bg-soft)] text-[var(--brand-primary)] dark:text-[#fda4af]">
+                  <ChartIcon className="h-5 w-5" />
+                </span>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-extrabold text-[var(--text-primary)]">
+                    Target Tabungan, Grafik &amp; Tanya Guri
+                  </h3>
+                  <p className="mt-0.5 text-xs leading-relaxed text-[var(--text-muted)]">
+                    Pantau batas anggaran per kategori, grafik tren tahunan, target tabungan, dan tanya kondisi keuanganmu ke Guri.
+                  </p>
                 </div>
               </div>
             </div>
@@ -528,9 +628,37 @@ export function LandingPage({
               </div>
 
               <p className="mt-3 text-xs text-[var(--text-muted)]">
-                Setiap perubahan atau hapus catatan di aplikasi ikut
-                menyesuaikan di Sheets.
+                Otomatis membuat tab <strong>Transaksi</strong> dan tab{" "}
+                <strong>Ringkasan</strong> berisi rumus rekap di Google Drive Anda.
               </p>
+            </div>
+          </section>
+
+          {/* Compact Bottom Action Strip */}
+          <section className="hero-maroon-gradient mt-8 flex flex-col items-start justify-between gap-4 rounded-2xl p-5 text-white sm:flex-row sm:items-center sm:p-6">
+            <div>
+              <h2 className="text-base font-extrabold sm:text-lg">
+                Mulai catat keuangan rapi hari ini.
+              </h2>
+              <p className="mt-0.5 text-xs text-white/85">
+                Gratis untuk pencatatan harian di HP maupun laptop, data tetap milik Anda.
+              </p>
+            </div>
+            <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+              <button
+                type="button"
+                onClick={() => openAuthModal("register")}
+                className="min-h-[42px] flex-1 rounded-xl bg-white px-4 text-xs font-extrabold text-[var(--brand-primary)] hover:bg-white/90 sm:flex-none"
+              >
+                Daftar Gratis
+              </button>
+              <button
+                type="button"
+                onClick={onEnterDemo}
+                className="min-h-[42px] flex-1 rounded-xl border border-white/35 bg-white/10 px-4 text-xs font-bold text-white hover:bg-white/20 sm:flex-none"
+              >
+                Coba Demo
+              </button>
             </div>
           </section>
         </div>
@@ -733,7 +861,7 @@ export function LandingPage({
                 />
               </div>
 
-              {db.transactions.length > 0 && (
+              {localDemoCount > 0 && (
                 <label
                   htmlFor="landing-migrate-local"
                   className="flex min-h-[40px] items-center gap-2 rounded-xl bg-[var(--bg-canvas)] px-3 py-1.5 text-xs text-[var(--text-muted)]"
@@ -746,8 +874,7 @@ export function LandingPage({
                     className="h-4 w-4 rounded"
                   />
                   <span>
-                    Ikut simpan {db.transactions.length} catatan dari perangkat
-                    ini
+                    Ikut simpan {localDemoCount} catatan demo dari perangkat ini
                   </span>
                 </label>
               )}

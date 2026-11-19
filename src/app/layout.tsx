@@ -26,6 +26,11 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/",
   },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "CatatCepat",
+  },
   openGraph: {
     type: "website",
     locale: "id_ID",

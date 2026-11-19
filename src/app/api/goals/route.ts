@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { toIsoDate } from "@/lib/finance";
-import { readAsyncDb, toPublicState, writeAsyncDb } from "@/lib/store";
+import { isUnauthenticatedCloudRequest, readAsyncDb, toPublicState, writeAsyncDb } from "@/lib/store";
 
 export async function POST(request: Request) {
   try {
@@ -16,6 +16,12 @@ export async function POST(request: Request) {
     };
 
     const db = await readAsyncDb();
+    if (isUnauthenticatedCloudRequest(db)) {
+      return NextResponse.json(
+        { error: "Silakan masuk ke akun Anda terlebih dahulu." },
+        { status: 401 },
+      );
+    }
     const nowIso = new Date().toISOString();
 
     if (body.action === "deposit_goal") {
@@ -87,6 +93,12 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "Parameter id wajib diisi." }, { status: 400 });
   }
   const db = await readAsyncDb();
+  if (isUnauthenticatedCloudRequest(db)) {
+    return NextResponse.json(
+      { error: "Silakan masuk ke akun Anda terlebih dahulu." },
+      { status: 401 },
+    );
+  }
   db.goals = db.goals.filter((g) => g.id !== id);
   // Deleting a goal cancels its deposits so the money returns to the source account balance.
   const removedDepositIds = db.transactions

@@ -1,7 +1,13 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import type { AppDatabase, ThemeKey, WorkspaceSettings } from "@/lib/types";
+import { readBrowserDemoExport } from "@/lib/client-demo";
+import type {
+  AccountKind,
+  AppDatabase,
+  ThemeKey,
+  WorkspaceSettings,
+} from "@/lib/types";
 import { CloseIcon } from "./Icons";
 import { ThemeDots } from "./ThemeDots";
 
@@ -10,11 +16,25 @@ export type SettingsTabKey = "sheets" | "atur" | "akun";
 interface SheetsDrawerProps {
   open: boolean;
   initialTab?: SettingsTabKey;
+  isDemoMode?: boolean;
   db: AppDatabase;
   themeColor: ThemeKey;
   onChangeTheme: (next: ThemeKey) => void;
   onClose: () => void;
   onStateUpdated: (next: AppDatabase) => void;
+  onSaveSettings: (payload: {
+    monthlyBudget: number;
+    paydayDay: number;
+    categoryPreset: WorkspaceSettings["categoryPreset"];
+    initialBalances: Record<string, number>;
+  }) => Promise<void>;
+  onAddAccount: (
+    name: string,
+    kind: AccountKind,
+    initialBalance: number,
+  ) => Promise<void>;
+  onDeleteAccount: (accountId: string) => Promise<void>;
+  onClearAll: () => Promise<void>;
   onTriggerSync?: (full?: boolean) => Promise<void> | void;
   onNotify: (msg: string) => void;
 }
@@ -22,21 +42,30 @@ interface SheetsDrawerProps {
 export function SheetsDrawer({
   open,
   initialTab = "sheets",
+  isDemoMode = false,
   db,
   themeColor,
   onChangeTheme,
   onClose,
   onStateUpdated,
+  onSaveSettings,
+  onAddAccount,
+  onDeleteAccount,
+  onClearAll,
   onTriggerSync,
   onNotify,
 }: SheetsDrawerProps) {
   const [activeTab, setActiveTab] = useState<SettingsTabKey>(initialTab);
-  const [budgetText, setBudgetText] = useState(String(db.settings.monthlyBudget));
+  const [budgetText, setBudgetText] = useState(
+    String(db.settings.monthlyBudget),
+  );
   const [paydayDay, setPaydayDay] = useState(String(db.settings.paydayDay));
   const [preset, setPreset] = useState<WorkspaceSettings["categoryPreset"]>(
     db.settings.categoryPreset,
   );
-  const [initialBalances, setInitialBalances] = useState<Record<string, string>>({});
+  const [initialBalances, setInitialBalances] = useState<
+    Record<string, string>
+  >({});
   const [csvText, setCsvText] = useState("");
   const [previewRows, setPreviewRows] = useState<string[][] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -47,6 +76,10 @@ export function SheetsDrawer({
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [migrateLocalOnAuth, setMigrateLocalOnAuth] = useState(false);
   const [authInfoMsg, setAuthInfoMsg] = useState<string | null>(null);
+  const [newAccName, setNewAccName] = useState("");
+  const [newAccKind, setNewAccKind] = useState<AccountKind>("bank");
+  const [newAccBalance, setNewAccBalance] = useState("");
+  const [addingAccount, setAddingAccount] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -55,7 +88,9 @@ export function SheetsDrawer({
     setPaydayDay(String(db.settings.paydayDay));
     setPreset(db.settings.categoryPreset);
     setInitialBalances(
-      Object.fromEntries(db.accounts.map((acc) => [acc.id, String(acc.initialBalance || 0)])),
+      Object.fromEntries(
+        db.accounts.map((acc) => [acc.id, String(acc.initialBalance || 0)]),
+      ),
     );
     setErrorMsg(null);
     setConfirmClear(false);
@@ -82,23 +117,16 @@ export function SheetsDrawer({
       const numericInitialBalances = Object.fromEntries(
         db.accounts.map((acc) => [
           acc.id,
-          parseInt((initialBalances[acc.id] ?? "0").replace(/\D/g, ""), 10) || 0,
+          parseInt((initialBalances[acc.id] ?? "0").replace(/\D/g, ""), 10) ||
+            0,
         ]),
       );
-      const res = await fetch("/api/state", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          monthlyBudget: budget,
-          paydayDay: day,
-          categoryPreset: preset,
-          initialBalances: numericInitialBalances,
-        }),
+      await onSaveSettings({
+        monthlyBudget: budget,
+        paydayDay: day,
+        categoryPreset: preset,
+        initialBalances: numericInitialBalances,
       });
-      const data = (await res.json().catch(() => ({}))) as AppDatabase & { error?: string };
-      if (!res.ok) throw new Error(data.error || "Gagal menyimpan pengaturan.");
-      onStateUpdated(data);
-      onNotify("Pengaturan anggaran, saldo awal, dan kategori diperbarui.");
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Gagal menyimpan.");
     } finally {
@@ -106,7 +134,51 @@ export function SheetsDrawer({
     }
   };
 
+  const handleAddAccountClick = async () => {
+    const clean = newAccName.trim();
+    if (!clean) {
+      setErrorMsg("Nama dompet baru wajib diisi.");
+      return;
+    }
+    setBusy(true);
+    setErrorMsg(null);
+    try {
+      const initBal = parseInt(newAccBalance.replace(/\D/g, ""), 10) || 0;
+      await onAddAccount(clean, newAccKind, initBal);
+      setNewAccName("");
+      setNewAccBalance("");
+      setAddingAccount(false);
+    } catch (err) {
+      setErrorMsg(
+        err instanceof Error ? err.message : "Gagal menambah dompet.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDeleteAccountClick = async (accountId: string) => {
+    setBusy(true);
+    setErrorMsg(null);
+    try {
+      await onDeleteAccount(accountId);
+    } catch (err) {
+      setErrorMsg(
+        err instanceof Error ? err.message : "Gagal menghapus dompet.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleConnectGoogle = async () => {
+    if (isDemoMode) {
+      setErrorMsg(
+        "Masuk ke akun Anda di tab Akun & Data terlebih dahulu agar Google Sheets tersimpan aman.",
+      );
+      setActiveTab("akun");
+      return;
+    }
     setBusy(true);
     setErrorMsg(null);
     try {
@@ -129,6 +201,21 @@ export function SheetsDrawer({
   };
 
   const handleSyncOrPreview = async (full = false) => {
+    if (isDemoMode) {
+      const rows: string[][] = [
+        ["Transaction ID", "Tanggal", "Jenis", "Kategori", "Akun", "Nominal"],
+        ...db.transactions.slice(0, 8).map((tx) => [
+          tx.id,
+          tx.date,
+          tx.type,
+          tx.category,
+          db.accounts.find((a) => a.id === tx.accountId)?.name || tx.accountId,
+          String(tx.amount),
+        ]),
+      ];
+      setPreviewRows(rows);
+      return;
+    }
     setBusy(true);
     setErrorMsg(null);
     try {
@@ -170,13 +257,20 @@ export function SheetsDrawer({
     setErrorMsg(null);
     try {
       const res = await fetch("/api/sheets/sync", { method: "DELETE" });
-      const data = (await res.json().catch(() => ({}))) as AppDatabase & { error?: string };
-      if (!res.ok) throw new Error(data.error || "Gagal memutus koneksi Google Sheets.");
+      const data = (await res.json().catch(() => ({}))) as AppDatabase & {
+        error?: string;
+      };
+      if (!res.ok)
+        throw new Error(data.error || "Gagal memutus koneksi Google Sheets.");
       onStateUpdated(data);
       setPreviewRows(null);
       onNotify("Koneksi Google Sheets diputus.");
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Gagal memutus koneksi Google Sheets.");
+      setErrorMsg(
+        err instanceof Error
+          ? err.message
+          : "Gagal memutus koneksi Google Sheets.",
+      );
     } finally {
       setBusy(false);
     }
@@ -200,7 +294,8 @@ export function SheetsDrawer({
         state?: AppDatabase;
         error?: string;
       };
-      if (!res.ok || !data.state) throw new Error(data.error || "Data gagal dibaca.");
+      if (!res.ok || !data.state)
+        throw new Error(data.error || "Data gagal dibaca.");
       onStateUpdated(data.state);
       setCsvText("");
       onNotify(`Berhasil mengimpor ${data.importedCount} transaksi.`);
@@ -218,21 +313,15 @@ export function SheetsDrawer({
     setBusy(true);
     setErrorMsg(null);
     try {
-      const res = await fetch("/api/state", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "clear_all_data" }),
-      });
-      const next = (await res.json().catch(() => ({}))) as AppDatabase & { error?: string };
-      if (!res.ok) throw new Error(next.error || "Gagal menghapus semua data.");
-      onStateUpdated(next);
+      await onClearAll();
       setConfirmClear(false);
-      onNotify("Semua transaksi dan target dibersihkan.");
-      if (next.sheetConnection.connected) {
+      if (!isDemoMode && db.sheetConnection.connected) {
         void onTriggerSync?.(true);
       }
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Gagal menghapus semua data.");
+      setErrorMsg(
+        err instanceof Error ? err.message : "Gagal menghapus semua data.",
+      );
     } finally {
       setBusy(false);
     }
@@ -252,11 +341,17 @@ export function SheetsDrawer({
     setErrorMsg(null);
     try {
       const res = await fetch("/api/auth?provider=google");
-      const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
-      if (!res.ok || !data.url) throw new Error(data.error || "Gagal memulai login Google.");
+      const data = (await res.json().catch(() => ({}))) as {
+        url?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.url)
+        throw new Error(data.error || "Gagal memulai login Google.");
       window.location.href = data.url;
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Gagal memulai login Google.");
+      setErrorMsg(
+        err instanceof Error ? err.message : "Gagal memulai login Google.",
+      );
       setBusy(false);
     }
   };
@@ -267,6 +362,9 @@ export function SheetsDrawer({
     setErrorMsg(null);
     setAuthInfoMsg(null);
     try {
+      const localExport = migrateLocalOnAuth
+        ? readBrowserDemoExport()
+        : { transactions: [], goals: [] };
       const res = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -275,6 +373,8 @@ export function SheetsDrawer({
           email: authEmail,
           password: authPassword,
           migrateLocal: migrateLocalOnAuth,
+          localTransactions: localExport.transactions,
+          localGoals: localExport.goals,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as {
@@ -285,7 +385,9 @@ export function SheetsDrawer({
       };
       if (!res.ok) throw new Error(data.error || "Gagal memproses akun.");
       if (data.needsEmailConfirmation) {
-        setAuthInfoMsg(data.message || "Cek email Anda untuk verifikasi pendaftaran.");
+        setAuthInfoMsg(
+          data.message || "Cek email Anda untuk verifikasi pendaftaran.",
+        );
         return;
       }
       if (data.state) {
@@ -314,8 +416,12 @@ export function SheetsDrawer({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "logout" }),
       });
-      const data = (await res.json().catch(() => ({}))) as { state?: AppDatabase; error?: string };
-      if (!res.ok || !data.state) throw new Error(data.error || "Gagal keluar akun.");
+      const data = (await res.json().catch(() => ({}))) as {
+        state?: AppDatabase;
+        error?: string;
+      };
+      if (!res.ok || !data.state)
+        throw new Error(data.error || "Gagal keluar akun.");
       onStateUpdated(data.state);
       onNotify("Anda sudah keluar dari akun.");
     } catch (err) {
@@ -329,21 +435,31 @@ export function SheetsDrawer({
     setBusy(true);
     setErrorMsg(null);
     try {
+      const localExport = readBrowserDemoExport();
       const res = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "migrate_local" }),
+        body: JSON.stringify({
+          action: "migrate_local",
+          localTransactions: localExport.transactions,
+          localGoals: localExport.goals,
+        }),
       });
       const data = (await res.json().catch(() => ({}))) as {
         migratedCount?: number;
         state?: AppDatabase;
         error?: string;
       };
-      if (!res.ok || !data.state) throw new Error(data.error || "Gagal memindahkan catatan.");
+      if (!res.ok || !data.state)
+        throw new Error(data.error || "Gagal memindahkan catatan.");
       onStateUpdated(data.state);
-      onNotify(`Berhasil menyimpan ${data.migratedCount ?? 0} catatan ke akun Anda.`);
+      onNotify(
+        `Berhasil menyimpan ${data.migratedCount ?? 0} catatan ke akun Anda.`,
+      );
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Gagal memindahkan catatan.");
+      setErrorMsg(
+        err instanceof Error ? err.message : "Gagal memindahkan catatan.",
+      );
     } finally {
       setBusy(false);
     }
@@ -363,7 +479,10 @@ export function SheetsDrawer({
         {/* Sticky Header + 3 Crisp Tabs */}
         <div className="border-b border-[var(--border-subtle)] px-5 pb-3 pt-4">
           <div className="flex items-center justify-between gap-2">
-            <h2 id="drawer-sheets-title" className="text-base font-extrabold text-[var(--text-primary)]">
+            <h2
+              id="drawer-sheets-title"
+              className="text-base font-extrabold text-[var(--text-primary)]"
+            >
               Sheets &amp; Pengaturan
             </h2>
             <button
@@ -454,7 +573,8 @@ export function SheetsDrawer({
                 <div className="text-xs">
                   {totalPendingCount > 0 ? (
                     <p className="rounded-xl bg-[var(--bg-soft)] px-3 py-2 font-bold text-[var(--brand-primary)] dark:text-[#fda4af]">
-                      Menunggu sinkronisasi: {pendingTxCount} transaksi, {pendingDeleteCount} hapus
+                      Menunggu sinkronisasi: {pendingTxCount} transaksi,{" "}
+                      {pendingDeleteCount} hapus
                     </p>
                   ) : (
                     <p className="text-[var(--text-muted)]">
@@ -503,7 +623,9 @@ export function SheetsDrawer({
                   onClick={() => handleSyncOrPreview(false)}
                   className="min-h-[42px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-4 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)] disabled:opacity-60"
                 >
-                  {sheetConnection.connected ? "Sinkron Sekarang" : "Pratinjau Tabel"}
+                  {sheetConnection.connected
+                    ? "Sinkron Sekarang"
+                    : "Pratinjau Tabel"}
                 </button>
 
                 {sheetConnection.connected && (
@@ -525,11 +647,20 @@ export function SheetsDrawer({
                       {previewRows.map((row, idx) => (
                         <tr
                           key={idx}
-                          className={idx === 0 ? "border-b border-[var(--border-subtle)] font-bold" : ""}
+                          className={
+                            idx === 0
+                              ? "border-b border-[var(--border-subtle)] font-bold"
+                              : ""
+                          }
                         >
                           {row.slice(0, 6).map((cell, cIdx) => (
-                            <td key={cIdx} className="whitespace-nowrap px-2 py-1">
-                              {cIdx === 0 && idx > 0 ? `${cell.slice(0, 8)}...` : cell}
+                            <td
+                              key={cIdx}
+                              className="whitespace-nowrap px-2 py-1"
+                            >
+                              {cIdx === 0 && idx > 0
+                                ? `${cell.slice(0, 8)}...`
+                                : cell}
                             </td>
                           ))}
                         </tr>
@@ -547,7 +678,11 @@ export function SheetsDrawer({
                 <span className="mb-2 block text-xs font-bold text-[var(--text-primary)]">
                   Warna Tema Aplikasi
                 </span>
-                <ThemeDots value={themeColor} onChange={onChangeTheme} showLabel={false} />
+                <ThemeDots
+                  value={themeColor}
+                  onChange={onChangeTheme}
+                  showLabel={false}
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-2.5">
@@ -562,8 +697,12 @@ export function SheetsDrawer({
                     id="setting-budget"
                     type="text"
                     inputMode="numeric"
-                    value={(parseInt(budgetText.replace(/\D/g, ""), 10) || 0).toLocaleString("id-ID")}
-                    onChange={(e) => setBudgetText(e.target.value.replace(/\D/g, ""))}
+                    value={(
+                      parseInt(budgetText.replace(/\D/g, ""), 10) || 0
+                    ).toLocaleString("id-ID")}
+                    onChange={(e) =>
+                      setBudgetText(e.target.value.replace(/\D/g, ""))
+                    }
                     className="min-h-[40px] w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-sm font-bold text-[var(--text-primary)] tabular-nums"
                   />
                 </div>
@@ -597,33 +736,119 @@ export function SheetsDrawer({
                   id="setting-preset"
                   value={preset}
                   onChange={(e) =>
-                    setPreset(e.target.value as WorkspaceSettings["categoryPreset"])
+                    setPreset(
+                      e.target.value as WorkspaceSettings["categoryPreset"],
+                    )
                   }
                   className="min-h-[40px] w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-xs font-bold text-[var(--text-primary)]"
                 >
                   <option value="umum">Umum / Keluarga</option>
-                  <option value="asn_karyawan">ASN / Karyawan (Gaji, Tunjangan, Bonus, THR)</option>
-                  <option value="mahasiswa">Mahasiswa (Uang Saku, Beasiswa)</option>
-                  <option value="freelancer">Freelance (Proyek Klien, Retainer, Royalti)</option>
+                  <option value="asn_karyawan">
+                    ASN / Karyawan (Gaji, Tunjangan, Bonus, THR)
+                  </option>
+                  <option value="mahasiswa">
+                    Mahasiswa (Uang Saku, Beasiswa)
+                  </option>
+                  <option value="freelancer">
+                    Freelance (Proyek Klien, Retainer, Royalti)
+                  </option>
                 </select>
               </div>
 
               <div>
-                <span className="mb-1.5 block text-xs font-bold text-[var(--text-muted)]">
-                  Saldo Awal Dompet (Rp)
-                </span>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="mb-1.5 flex items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-[var(--text-muted)]">
+                    Dompet &amp; Saldo Awal (Rp)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setAddingAccount((v) => !v)}
+                    className="text-xs font-bold text-[var(--brand-primary)] hover:underline dark:text-[#fda4af]"
+                  >
+                    {addingAccount ? "Tutup" : "+ Tambah Dompet"}
+                  </button>
+                </div>
+
+                {addingAccount && (
+                  <div className="mb-2.5 space-y-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        value={newAccName}
+                        onChange={(e) => setNewAccName(e.target.value)}
+                        placeholder="Mis: BCA / GoPay / Kas"
+                        className="min-h-[38px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2.5 text-xs font-bold text-[var(--text-primary)]"
+                      />
+                      <select
+                        value={newAccKind}
+                        onChange={(e) =>
+                          setNewAccKind(e.target.value as AccountKind)
+                        }
+                        aria-label="Jenis dompet"
+                        className="min-h-[38px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2.5 text-xs font-bold text-[var(--text-primary)]"
+                      >
+                        <option value="bank">Bank / Rekening</option>
+                        <option value="ewallet">E-Wallet</option>
+                        <option value="cash">Tunai / Kas</option>
+                      </select>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={
+                          newAccBalance
+                            ? (
+                                parseInt(newAccBalance.replace(/\D/g, ""), 10) ||
+                                0
+                              ).toLocaleString("id-ID")
+                            : ""
+                        }
+                        onChange={(e) =>
+                          setNewAccBalance(e.target.value.replace(/\D/g, ""))
+                        }
+                        placeholder="Saldo awal (opsional, Rp 0)"
+                        className="min-h-[38px] flex-1 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2.5 text-xs font-bold text-[var(--text-primary)] tabular-nums"
+                      />
+                      <button
+                        type="button"
+                        disabled={busy || !newAccName.trim()}
+                        onClick={handleAddAccountClick}
+                        className="min-h-[38px] rounded-xl bg-[var(--brand-primary)] px-3.5 text-xs font-extrabold text-white hover:bg-[var(--brand-hover)] disabled:opacity-50"
+                      >
+                        Tambah
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {db.accounts.map((acc) => {
-                    const raw = initialBalances[acc.id] ?? String(acc.initialBalance || 0);
+                    const raw =
+                      initialBalances[acc.id] ??
+                      String(acc.initialBalance || 0);
                     const numeric = parseInt(raw.replace(/\D/g, ""), 10) || 0;
                     return (
                       <div key={acc.id}>
-                        <label
-                          htmlFor={`init-bal-${acc.id}`}
-                          className="mb-1 block truncate text-[11px] font-semibold text-[var(--text-muted)]"
-                        >
-                          {acc.name}
-                        </label>
+                        <div className="mb-1 flex items-center justify-between gap-1">
+                          <label
+                            htmlFor={`init-bal-${acc.id}`}
+                            className="truncate text-[11px] font-semibold text-[var(--text-muted)]"
+                          >
+                            {acc.name}
+                          </label>
+                          {db.accounts.length > 1 && (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => handleDeleteAccountClick(acc.id)}
+                              aria-label={`Hapus dompet ${acc.name}`}
+                              className="shrink-0 text-[10px] font-bold text-[var(--expense-text)] hover:underline disabled:opacity-50"
+                            >
+                              Hapus
+                            </button>
+                          )}
+                        </div>
                         <input
                           id={`init-bal-${acc.id}`}
                           type="text"
@@ -663,9 +888,9 @@ export function SheetsDrawer({
                     </h3>
                     <p className="mt-0.5 text-xs text-[var(--text-muted)]">
                       {auth?.authenticated
-                        ? `Masuk sebagai ${auth.email || "Pengguna"}`
+                        ? `Masuk sebagai ${auth.email || "Pengguna"} · Paket ${db.settings.plan === "pro" ? "Pro" : `Gratis (Sisa AI: ${db.settings.aiCreditsRemaining ?? 20})`}`
                         : auth?.configured
-                          ? "Belum masuk ke akun online."
+                          ? "Mode Demo (tersimpan pribadi di browser ini)."
                           : "Penyimpanan lokal di perangkat ini."}
                     </p>
                   </div>
@@ -681,7 +906,10 @@ export function SheetsDrawer({
                 </div>
 
                 {auth?.configured && !auth?.authenticated && (
-                  <form onSubmit={handleSupabaseAuth} className="mt-3 space-y-2.5">
+                  <form
+                    onSubmit={handleSupabaseAuth}
+                    className="mt-3 space-y-2.5"
+                  >
                     <button
                       type="button"
                       disabled={busy}
@@ -746,7 +974,9 @@ export function SheetsDrawer({
                       <input
                         type="checkbox"
                         checked={migrateLocalOnAuth}
-                        onChange={(e) => setMigrateLocalOnAuth(e.target.checked)}
+                        onChange={(e) =>
+                          setMigrateLocalOnAuth(e.target.checked)
+                        }
                         className="rounded"
                       />
                       <span>Ikut simpan catatan di perangkat ini</span>
@@ -763,7 +993,9 @@ export function SheetsDrawer({
                       disabled={busy}
                       className="min-h-[40px] w-full rounded-xl bg-[var(--brand-primary)] px-4 text-xs font-bold text-white hover:bg-[var(--brand-hover)] disabled:opacity-60"
                     >
-                      {authMode === "register" ? "Daftar & Buat Akun" : "Masuk ke Akun"}
+                      {authMode === "register"
+                        ? "Daftar & Buat Akun"
+                        : "Masuk ke Akun"}
                     </button>
                   </form>
                 )}
@@ -790,22 +1022,22 @@ export function SheetsDrawer({
                 )}
               </section>
 
-              <section className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-4">
+              {/* <section className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-4">
                 <h3 className="text-sm font-extrabold text-[var(--text-primary)]">
-                  Impor Data
+                  Impor Data CSV
                 </h3>
                 <label
                   htmlFor="legacy-csv-input"
                   className="mt-1.5 block text-xs font-bold text-[var(--text-muted)]"
-                >
-                  Isi Data Catatan
-                </label>
+                ></label>
                 <textarea
                   id="legacy-csv-input"
                   rows={2}
                   value={csvText}
                   onChange={(e) => setCsvText(e.target.value)}
-                  placeholder={"Tanggal,Jenis,Nominal,Kategori,Keterangan\n16-11-2026,Keluar,25000,Makan & Minum,Nasi Padang"}
+                  placeholder={
+                    "Tanggal,Jenis,Nominal,Kategori,Keterangan\n16-11-2026,Keluar,25000,Makan & Minum,Nasi Padang"
+                  }
                   className="mt-1 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-2.5 text-xs text-[var(--text-primary)]"
                 />
                 <button
@@ -816,7 +1048,7 @@ export function SheetsDrawer({
                 >
                   Impor Data
                 </button>
-              </section>
+              </section> */}
 
               <div className="flex items-center justify-between border-t border-[var(--border-subtle)] pt-3">
                 {!confirmClear ? (

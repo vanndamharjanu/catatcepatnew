@@ -1,17 +1,20 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import {
+  addAccountInDb,
   ALLOWED_CATEGORY_ICONS,
   buildPresetCategoryList,
   buildSimulationTransactions,
+  deleteAccountInDb,
   deleteCategoryInDb,
+  isUnauthenticatedCloudRequest,
   readAsyncDb,
   reorderCategoriesInDb,
   toPublicState,
   updateCategoryInDb,
   writeAsyncDb,
 } from "@/lib/store";
-import type { WorkspaceSettings } from "@/lib/types";
+import type { AccountKind, WorkspaceSettings } from "@/lib/types";
 
 export async function GET() {
   const db = await readAsyncDb();
@@ -32,11 +35,21 @@ export async function PATCH(request: Request) {
       iconKey?: string;
       replacementCategory?: string;
       orderedIds?: string[];
-      plan?: "free" | "pro";
+      accountName?: string;
+      accountKind?: AccountKind;
+      accountInitialBalance?: number;
+      accountId?: string;
+      replacementAccountId?: string;
       initialBalances?: Record<string, number>;
     };
 
     const db = await readAsyncDb();
+    if (isUnauthenticatedCloudRequest(db)) {
+      return NextResponse.json(
+        { error: "Silakan masuk ke akun Anda terlebih dahulu." },
+        { status: 401 },
+      );
+    }
 
     if (body.action === "load_simulation") {
       const sample = buildSimulationTransactions();
@@ -111,6 +124,29 @@ export async function PATCH(request: Request) {
       return NextResponse.json(toPublicState(db));
     }
 
+    if (body.action === "add_account") {
+      const result = addAccountInDb(
+        db,
+        body.accountName || "",
+        body.accountKind || "bank",
+        body.accountInitialBalance ?? 0,
+      );
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: result.status });
+      }
+      await writeAsyncDb(db);
+      return NextResponse.json(toPublicState(db));
+    }
+
+    if (body.action === "delete_account" && body.accountId) {
+      const result = deleteAccountInDb(db, body.accountId, body.replacementAccountId);
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: result.status });
+      }
+      await writeAsyncDb(db);
+      return NextResponse.json(toPublicState(db));
+    }
+
     if (typeof body.monthlyBudget === "number" && body.monthlyBudget >= 0) {
       db.settings.monthlyBudget = Math.round(body.monthlyBudget);
     }
@@ -119,9 +155,6 @@ export async function PATCH(request: Request) {
     }
     if (typeof body.name === "string" && body.name.trim()) {
       db.settings.name = body.name.trim().slice(0, 60);
-    }
-    if (body.plan === "free" || body.plan === "pro") {
-      db.settings.plan = body.plan;
     }
     if (body.categoryPreset) {
       db.settings.categoryPreset = body.categoryPreset;

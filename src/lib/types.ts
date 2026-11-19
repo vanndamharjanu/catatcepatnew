@@ -123,6 +123,18 @@ export interface WorkspaceSettings {
   paydayDay: number;
   plan: "free" | "pro";
   categoryPreset: "umum" | "asn_karyawan" | "mahasiswa" | "freelancer";
+  aiCreditsRemaining?: number;
+}
+
+export interface RecurringTemplate {
+  id: string;
+  name: string;
+  type: "Masuk" | "Keluar";
+  category: string;
+  accountId: string;
+  amount: number;
+  dayOfMonth: number; // 1..28
+  lastRecordedMonth?: string; // YYYY-MM
 }
 
 export interface AuthStatus {

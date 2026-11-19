@@ -1,3 +1,4 @@
+import { secureCookieOptions } from "./security.ts";
 import type {
   Account,
   AppDatabase,
@@ -261,18 +262,8 @@ export async function getActiveSessionFromCookies(): Promise<SupabaseSession | n
       const refreshed = await refreshSupabaseToken(refreshToken);
       if (refreshed) {
         try {
-          store.set(CC_ACCESS_COOKIE, refreshed.accessToken, {
-            httpOnly: true,
-            sameSite: "lax",
-            path: "/",
-            maxAge: 60 * 60 * 24 * 7,
-          });
-          store.set(CC_REFRESH_COOKIE, refreshed.refreshToken, {
-            httpOnly: true,
-            sameSite: "lax",
-            path: "/",
-            maxAge: 60 * 60 * 24 * 30,
-          });
+          store.set(CC_ACCESS_COOKIE, refreshed.accessToken, secureCookieOptions(60 * 60 * 24 * 7));
+          store.set(CC_REFRESH_COOKIE, refreshed.refreshToken, secureCookieOptions(60 * 60 * 24 * 30));
         } catch {
           // Server Component render context cannot mutate cookies; session is still valid for this request.
         }
@@ -309,8 +300,8 @@ export function computeDbDiff(before: AppDatabase, after: AppDatabase): Workspac
     before.settings.name !== after.settings.name ||
     before.settings.monthlyBudget !== after.settings.monthlyBudget ||
     before.settings.paydayDay !== after.settings.paydayDay ||
-    before.settings.plan !== after.settings.plan ||
-    before.settings.categoryPreset !== after.settings.categoryPreset;
+    before.settings.categoryPreset !== after.settings.categoryPreset ||
+    before.settings.aiCreditsRemaining !== after.settings.aiCreditsRemaining;
 
   const beforeAccMap = new Map(
     before.accounts.map((a, idx) => [a.id, { ...a, sortOrder: idx }]),
@@ -465,7 +456,7 @@ export async function readSupabaseWorkspace(
   const wsRes = await sbRestFetch(
     cfg,
     session.accessToken,
-    `workspaces?owner_id=eq.${encodeURIComponent(session.user.id)}&select=id,name,monthly_budget,payday_day,plan,category_preset&limit=1`,
+    `workspaces?owner_id=eq.${encodeURIComponent(session.user.id)}&select=id,name,monthly_budget,payday_day,plan,category_preset,ai_credits_remaining&limit=1`,
   );
   const wsRows = (await wsRes.json()) as Array<{
     id: string;
@@ -474,6 +465,7 @@ export async function readSupabaseWorkspace(
     payday_day: number;
     plan: "free" | "pro";
     category_preset?: WorkspaceSettings["categoryPreset"];
+    ai_credits_remaining?: number | null;
   }>;
 
   const hasGoogleConfig = Boolean(
@@ -490,8 +482,9 @@ export async function readSupabaseWorkspace(
         name: defaultSeed.settings.name,
         monthly_budget: defaultSeed.settings.monthlyBudget,
         payday_day: defaultSeed.settings.paydayDay,
-        plan: defaultSeed.settings.plan,
+        plan: "free",
         category_preset: defaultSeed.settings.categoryPreset,
+        ai_credits_remaining: defaultSeed.settings.aiCreditsRemaining ?? 20,
       }),
     });
     const created = (await createRes.json()) as Array<{ id: string }>;
@@ -661,6 +654,7 @@ export async function readSupabaseWorkspace(
       paydayDay: Number(ws.payday_day ?? 25),
       plan: ws.plan || "free",
       categoryPreset: ws.category_preset || "asn_karyawan",
+      aiCreditsRemaining: Number(ws.ai_credits_remaining ?? 20),
     },
     accounts:
       accRows.length > 0
@@ -740,8 +734,8 @@ export async function writeSupabaseWorkspaceDelta(
           name: after.settings.name,
           monthly_budget: after.settings.monthlyBudget,
           payday_day: after.settings.paydayDay,
-          plan: after.settings.plan,
           category_preset: after.settings.categoryPreset,
+          ai_credits_remaining: Math.max(0, Math.round(after.settings.aiCreditsRemaining ?? 20)),
           updated_at: new Date().toISOString(),
         }),
       },

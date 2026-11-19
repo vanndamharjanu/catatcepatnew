@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { CATEGORY_ICON_OPTIONS, type AppDatabase, type CategoryItem, type Transaction } from "./types.ts";
+import { CATEGORY_ICON_OPTIONS, type AccountKind, type AppDatabase, type CategoryItem, type Transaction } from "./types.ts";
 import { toIsoDate } from "./finance.ts";
 import {
   getActiveSessionFromCookies,
@@ -216,6 +216,77 @@ export function reorderCategoriesInDb(
   return { ok: true };
 }
 
+/** Add a custom wallet/account while preventing duplicate names and invalid kinds. */
+export function addAccountInDb(
+  db: AppDatabase,
+  name: string,
+  kind: AccountKind,
+  initialBalance = 0,
+): { ok: true } | { ok: false; status: number; error: string } {
+  const cleanName = name.trim().slice(0, 40);
+  if (!cleanName) {
+    return { ok: false, status: 400, error: "Nama dompet wajib diisi." };
+  }
+  const safeKind: AccountKind = kind === "bank" || kind === "ewallet" ? kind : "cash";
+  const dup = db.accounts.some((a) => a.name.toLowerCase() === cleanName.toLowerCase());
+  if (dup) {
+    return { ok: false, status: 400, error: `Dompet "${cleanName}" sudah ada.` };
+  }
+  const safeBalance = Math.max(0, Math.round(Number(initialBalance) || 0));
+  db.accounts.push({
+    id: `acc-${randomUUID().slice(0, 8)}`,
+    name: cleanName,
+    kind: safeKind,
+    initialBalance: safeBalance,
+  });
+  return { ok: true };
+}
+
+/** Delete a custom wallet/account; requires at least 1 account left and reassigns existing transactions. */
+export function deleteAccountInDb(
+  db: AppDatabase,
+  accountId: string,
+  replacementAccountId?: string,
+): { ok: true } | { ok: false; status: number; error: string } {
+  const target = db.accounts.find((a) => a.id === accountId);
+  if (!target) {
+    return { ok: false, status: 404, error: "Dompet tidak ditemukan." };
+  }
+  const remaining = db.accounts.filter((a) => a.id !== accountId);
+  if (remaining.length === 0) {
+    return { ok: false, status: 400, error: "Minimal harus ada 1 dompet aktif." };
+  }
+  const hasTx = db.transactions.some(
+    (tx) => tx.accountId === accountId || tx.toAccountId === accountId,
+  );
+  if (hasTx) {
+    const fallback = remaining.find((a) => a.id === replacementAccountId) ?? remaining[0];
+    const nowIso = new Date().toISOString();
+    for (const tx of db.transactions) {
+      let changed = false;
+      if (tx.accountId === accountId) {
+        tx.accountId = fallback.id;
+        changed = true;
+      }
+      if (tx.toAccountId === accountId) {
+        tx.toAccountId = fallback.id === tx.accountId ? undefined : fallback.id;
+        changed = true;
+      }
+      if (changed) {
+        tx.updatedAt = nowIso;
+        if (db.sheetConnection.connected) tx.sheetSyncStatus = "pending";
+      }
+    }
+  }
+  db.accounts = remaining;
+  return { ok: true };
+}
+
+/** True when running in Cloud multi-tenant mode without a logged-in user session. */
+export function isUnauthenticatedCloudRequest(db: AppDatabase): boolean {
+  return Boolean(db.auth?.configured && !db.auth?.authenticated);
+}
+
 /** Strip encrypted OAuth tokens before sending database state to the client. */
 export function toPublicState(db: AppDatabase): AppDatabase {
   const { encryptedRefreshToken: _secret, ...safeConn } = db.sheetConnection;
@@ -234,6 +305,7 @@ export function createInitialDb(): AppDatabase {
       paydayDay: 25,
       plan: "free",
       categoryPreset: "umum",
+      aiCreditsRemaining: 20,
     },
     accounts: [
       { id: "acc-cash", name: "Tunai", kind: "cash", initialBalance: 0 },
@@ -317,6 +389,8 @@ export async function readAsyncDb(): Promise<AppDatabase> {
       });
       return db;
     }
+    // Never read or expose shared server /tmp JSON across unauthenticated visitors in Cloud mode.
+    return createInitialDb();
   }
   return readDb();
 }

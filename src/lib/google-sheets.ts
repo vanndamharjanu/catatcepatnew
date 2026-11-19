@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { sanitizeSpreadsheetCell } from "./security.ts";
 import type { Account, AppDatabase, SheetConnection, Transaction } from "./types.ts";
 
 const OAUTH_SCOPE = [
@@ -23,8 +24,21 @@ const FULL_SYNC_CHUNK_SIZE = 2500;
 const accessTokenCache = new Map<string, { token: string; expiresAt: number }>();
 
 function getEncryptionKey(): Buffer {
-  const secret = process.env.APP_ENCRYPTION_SECRET || "catatcepat-dev-secret-change-in-production";
-  return createHash("sha256").update(secret).digest();
+  const configured = process.env.APP_ENCRYPTION_SECRET?.trim();
+  if (!configured) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "APP_ENCRYPTION_SECRET wajib dikonfigurasi di environment produksi (minimal 32 karakter).",
+      );
+    }
+    return createHash("sha256")
+      .update("catatcepat-dev-only-local-fallback")
+      .digest();
+  }
+  if (process.env.NODE_ENV === "production" && configured.length < 32) {
+    throw new Error("APP_ENCRYPTION_SECRET di produksi minimal 32 karakter acak.");
+  }
+  return createHash("sha256").update(configured).digest();
 }
 
 export function encryptToken(plainText: string): string {
@@ -179,7 +193,10 @@ export async function createCatatCepatSpreadsheet(accessToken: string): Promise<
     },
     body: JSON.stringify({
       properties: { title: "CatatCepat - Laporan Keuangan Pribadi" },
-      sheets: [{ properties: { title: "Transaksi", gridProperties: { frozenRowCount: 1 } } }],
+      sheets: [
+        { properties: { title: "Transaksi", gridProperties: { frozenRowCount: 1 } } },
+        { properties: { title: "Ringkasan", gridProperties: { frozenRowCount: 1 } } },
+      ],
     }),
   });
 
@@ -204,16 +221,41 @@ export async function createCatatCepatSpreadsheet(accessToken: string): Promise<
     sheets?: Array<{ properties?: { sheetId?: number; title?: string } }>;
   };
 
-  // Write canonical header row with Transaction UUID in column A
+  // Write canonical header row in Transaksi and live auto-calculated dashboard in Ringkasan
+  const ringkasanRows = [
+    ["Ringkasan Otomatis CatatCepat", "Nilai", "Keterangan"],
+    ["Total Pemasukan", '=SUMIF(Transaksi!C:C,"Masuk",Transaksi!F:F)', "Otomatis dari tab Transaksi"],
+    ["Total Pengeluaran", '=SUMIF(Transaksi!C:C,"Keluar",Transaksi!F:F)', "Otomatis dari tab Transaksi"],
+    ["Selisih Bersih", "=B2-B3", "Pemasukan dikurangi Pengeluaran"],
+    ["Jumlah Catatan", "=MAX(0,COUNTA(Transaksi!A:A)-1)", "Total baris transaksi tercatat"],
+    ["", "", ""],
+    ["Rekap Pengeluaran per Kategori", "Total (Rp)", "Persentase"],
+    ["Makan & Minum", '=SUMIFS(Transaksi!F:F,Transaksi!C:C,"Keluar",Transaksi!D:D,A8)', "=IF(B$3>0,B8/B$3,0)"],
+    ["Transportasi & Bensin", '=SUMIFS(Transaksi!F:F,Transaksi!C:C,"Keluar",Transaksi!D:D,A9)', "=IF(B$3>0,B9/B$3,0)"],
+    ["Listrik & Air", '=SUMIFS(Transaksi!F:F,Transaksi!C:C,"Keluar",Transaksi!D:D,A10)', "=IF(B$3>0,B10/B$3,0)"],
+    ["Pulsa & Kuota", '=SUMIFS(Transaksi!F:F,Transaksi!C:C,"Keluar",Transaksi!D:D,A11)', "=IF(B$3>0,B11/B$3,0)"],
+    ["Kesehatan & Obat", '=SUMIFS(Transaksi!F:F,Transaksi!C:C,"Keluar",Transaksi!D:D,A12)', "=IF(B$3>0,B12/B$3,0)"],
+    ["Sedekah & Donasi", '=SUMIFS(Transaksi!F:F,Transaksi!C:C,"Keluar",Transaksi!D:D,A13)', "=IF(B$3>0,B13/B$3,0)"],
+    ["Belanja", '=SUMIFS(Transaksi!F:F,Transaksi!C:C,"Keluar",Transaksi!D:D,A14)', "=IF(B$3>0,B14/B$3,0)"],
+    ["Pendidikan", '=SUMIFS(Transaksi!F:F,Transaksi!C:C,"Keluar",Transaksi!D:D,A15)', "=IF(B$3>0,B15/B$3,0)"],
+    ["Lain-lain", '=SUMIFS(Transaksi!F:F,Transaksi!C:C,"Keluar",Transaksi!D:D,A16)', "=IF(B$3>0,B16/B$3,0)"],
+  ];
+
   await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${created.spreadsheetId}/values/Transaksi!A1:H1?valueInputOption=USER_ENTERED`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${created.spreadsheetId}/values:batchUpdate`,
     {
-      method: "PUT",
+      method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ values: [SHEET_HEADERS] }),
+      body: JSON.stringify({
+        valueInputOption: "USER_ENTERED",
+        data: [
+          { range: "Transaksi!A1:H1", values: [SHEET_HEADERS] },
+          { range: `Ringkasan!A1:C${ringkasanRows.length}`, values: ringkasanRows },
+        ],
+      }),
     },
   );
 
@@ -234,10 +276,10 @@ export function transactionToSheetRow(tx: Transaction, accounts: Account[]): str
     tx.id,
     tx.date,
     tx.type,
-    tx.category,
-    accountDisplay,
+    sanitizeSpreadsheetCell(tx.category),
+    sanitizeSpreadsheetCell(accountDisplay),
     String(tx.amount),
-    tx.note,
+    sanitizeSpreadsheetCell(tx.note),
     tx.updatedAt,
   ];
 }
@@ -522,19 +564,4 @@ export async function syncTransactionsToSheet(
   );
 
   return { syncedCount: transactions.length };
-}
-
-/** Legacy synchronous helper kept only if explicit immediate full sync is needed. */
-export async function tryAutoSync(db: AppDatabase): Promise<void> {
-  if (!db.sheetConnection.connected) return;
-  try {
-    await syncTransactionsToSheet(db.sheetConnection, db.transactions, db.accounts);
-    db.transactions = db.transactions.map((tx) => ({ ...tx, sheetSyncStatus: "synced" }));
-    db.sheetConnection.pendingDeletes = [];
-    db.sheetConnection.lastSyncedAt = new Date().toISOString();
-    db.sheetConnection.lastError = undefined;
-  } catch (err) {
-    db.sheetConnection.lastError =
-      err instanceof Error ? err.message : "Gagal sinkronisasi ke Google Sheets";
-  }
 }

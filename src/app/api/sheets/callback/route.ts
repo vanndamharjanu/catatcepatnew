@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import {
   createCatatCepatSpreadsheet,
@@ -6,16 +7,35 @@ import {
   fetchGoogleUserEmail,
   syncTransactionsToSheet,
 } from "@/lib/google-sheets";
-import { readAsyncDb, writeAsyncDb } from "@/lib/store";
+import { constantTimeEqual, SHEETS_OAUTH_STATE_COOKIE } from "@/lib/security";
+import { isUnauthenticatedCloudRequest, readAsyncDb, writeAsyncDb } from "@/lib/store";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
+  const state = searchParams.get("state") || "";
   const error = searchParams.get("error");
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/+$/, "");
+
+  const cookieStore = await cookies();
+  const expectedState = cookieStore.get(SHEETS_OAUTH_STATE_COOKIE)?.value || "";
+  cookieStore.delete(SHEETS_OAUTH_STATE_COOKIE);
 
   if (error || !code) {
     return NextResponse.redirect(`${appUrl}/?sheets=cancelled`);
+  }
+
+  // Require an authenticated session in Cloud mode so OAuth tokens never fall back to local storage.
+  const db = await readAsyncDb();
+  if (isUnauthenticatedCloudRequest(db)) {
+    return NextResponse.redirect(`${appUrl}/?sheets=auth_required`);
+  }
+
+  if (!expectedState || !state || !constantTimeEqual(state, expectedState)) {
+    db.sheetConnection.lastError =
+      "Sesi keamanan Google Sheets tidak cocok atau kedaluwarsa. Silakan ulangi hubungkan.";
+    await writeAsyncDb(db);
+    return NextResponse.redirect(`${appUrl}/?sheets=error`);
   }
 
   try {
@@ -30,7 +50,6 @@ export async function GET(request: Request) {
     const email = await fetchGoogleUserEmail(accessToken);
     const sheet = await createCatatCepatSpreadsheet(accessToken);
 
-    const db = await readAsyncDb();
     db.sheetConnection = {
       configured: true,
       connected: true,
@@ -55,10 +74,12 @@ export async function GET(request: Request) {
     await writeAsyncDb(db);
     return NextResponse.redirect(`${appUrl}/?sheets=connected`);
   } catch (err) {
-    const db = await readAsyncDb();
-    db.sheetConnection.lastError =
-      err instanceof Error ? err.message : "Gagal menghubungkan Google Sheets";
-    await writeAsyncDb(db);
+    const latest = await readAsyncDb();
+    if (!isUnauthenticatedCloudRequest(latest)) {
+      latest.sheetConnection.lastError =
+        err instanceof Error ? err.message : "Gagal menghubungkan Google Sheets";
+      await writeAsyncDb(latest);
+    }
     return NextResponse.redirect(`${appUrl}/?sheets=error`);
   }
 }

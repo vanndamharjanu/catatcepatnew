@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
-import { parseLegacyCsv, readAsyncDb, toPublicState, writeAsyncDb } from "@/lib/store";
+import {
+  isUnauthenticatedCloudRequest,
+  parseLegacyCsv,
+  readAsyncDb,
+  toPublicState,
+  writeAsyncDb,
+} from "@/lib/store";
 
 export async function POST(request: Request) {
   try {
@@ -7,8 +13,20 @@ export async function POST(request: Request) {
     if (!body.csvText || !body.csvText.trim()) {
       return NextResponse.json({ error: "Isi CSV tidak boleh kosong." }, { status: 400 });
     }
+    if (body.csvText.length > 500_000) {
+      return NextResponse.json(
+        { error: "Ukuran CSV terlalu besar (maksimal 500 KB per impor)." },
+        { status: 413 },
+      );
+    }
 
     const db = await readAsyncDb();
+    if (isUnauthenticatedCloudRequest(db)) {
+      return NextResponse.json(
+        { error: "Silakan masuk ke akun Anda terlebih dahulu." },
+        { status: 401 },
+      );
+    }
     const targetAccountId = body.accountId || db.accounts[0]?.id || "acc-cash";
     const imported = parseLegacyCsv(body.csvText, targetAccountId);
 

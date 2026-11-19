@@ -17,8 +17,21 @@ export function formatCompactRupiah(amount: number): string {
   return `${sign}Rp${abs}`;
 }
 
-/** Return local calendar date formatted as YYYY-MM-DD. */
+/** Return calendar date formatted as YYYY-MM-DD (device timezone in browser, Asia/Jakarta on server). */
 export function toIsoDate(date: Date = new Date()): string {
+  if (typeof window === "undefined") {
+    try {
+      const formatted = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Jakarta",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(date);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(formatted)) return formatted;
+    } catch {
+      // Fallback to local clock if Intl timezone data is unavailable
+    }
+  }
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");

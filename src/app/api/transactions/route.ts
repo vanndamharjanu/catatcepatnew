@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { computeAccountBalances, formatRupiah, toIsoDate } from "@/lib/finance";
-import { readAsyncDb, toPublicState, writeAsyncDb } from "@/lib/store";
+import { isUnauthenticatedCloudRequest, readAsyncDb, toPublicState, writeAsyncDb } from "@/lib/store";
 import type { Account, Transaction, TransactionSource, TransactionType } from "@/lib/types";
 
 interface TransactionInput {
@@ -62,6 +62,12 @@ export async function POST(request: Request) {
     } & TransactionInput;
 
     const db = await readAsyncDb();
+    if (isUnauthenticatedCloudRequest(db)) {
+      return NextResponse.json(
+        { error: "Silakan masuk ke akun Anda terlebih dahulu." },
+        { status: 401 },
+      );
+    }
     const nowIso = new Date().toISOString();
 
     if (body.action === "reconcile") {
@@ -148,6 +154,12 @@ export async function PATCH(request: Request) {
     }
 
     const db = await readAsyncDb();
+    if (isUnauthenticatedCloudRequest(db)) {
+      return NextResponse.json(
+        { error: "Silakan masuk ke akun Anda terlebih dahulu." },
+        { status: 401 },
+      );
+    }
     const idx = db.transactions.findIndex((t) => t.id === body.id);
     if (idx === -1) {
       return NextResponse.json({ error: "Transaksi tidak ditemukan." }, { status: 404 });
@@ -185,6 +197,12 @@ export async function DELETE(request: Request) {
     }
 
     const db = await readAsyncDb();
+    if (isUnauthenticatedCloudRequest(db)) {
+      return NextResponse.json(
+        { error: "Silakan masuk ke akun Anda terlebih dahulu." },
+        { status: 401 },
+      );
+    }
     const before = db.transactions.length;
     db.transactions = db.transactions.filter((t) => t.id !== id);
     if (db.transactions.length === before) {

@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  answerFinancialQuestion,
   computeAccountBalances,
   computeDailyAllowance,
   computePeriodMetrics,
@@ -12,13 +13,29 @@ import {
   type TimeRangeKey,
 } from "@/lib/finance";
 import {
+  buildDemoSampleTransactions,
+  escapeCsvCell,
+  loadDemoDb,
+  loadOfflineQueue,
+  loadWorkspaceExtras,
+  recomputeGoalsClient,
+  saveDemoDb,
+  saveOfflineQueue,
+  saveWorkspaceExtras,
+  type QueuedTransactionPayload,
+  type WorkspaceExtras,
+} from "@/lib/client-demo";
+import {
   APP_SLOGAN,
   THEME_OPTIONS,
+  type AccountKind,
   type AppDatabase,
   type ParsedTransactionDraft,
+  type RecurringTemplate,
   type ThemeKey,
   type Transaction,
   type TransactionType,
+  type WorkspaceSettings,
 } from "@/lib/types";
 import { KoreksiSaldoModal } from "./AccountCarousel";
 import {
@@ -109,10 +126,43 @@ export function AppClient({ initialDb }: AppClientProps) {
   const [askAnswer, setAskAnswer] = useState<string | null>(null);
   const [askLoading, setAskLoading] = useState(false);
 
-  // Global status toast / error banner
+  // Global status toast / error banner + offline queue & workspace extras
   const [toast, setToast] = useState<string | null>(null);
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
+  const [offlineQueue, setOfflineQueue] = useState<QueuedTransactionPayload[]>([]);
+  const [extras, setExtras] = useState<WorkspaceExtras>({ recurring: [], categoryBudgets: {} });
+  const [recName, setRecName] = useState("");
+  const [recType, setRecType] = useState<"Masuk" | "Keluar">("Keluar");
+  const [recCategory, setRecCategory] = useState("Listrik & Air");
+  const [recAccountId, setRecAccountId] = useState(initialDb.accounts[0]?.id || "acc-cash");
+  const [recAmountRaw, setRecAmountRaw] = useState("");
+  const [recDay, setRecDay] = useState("25");
+  const [budgetCatName, setBudgetCatName] = useState("Makan & Minum");
+  const [budgetCatCapRaw, setBudgetCatCapRaw] = useState("");
+
+  const isDemoMode = Boolean(db.auth?.configured && !db.auth?.authenticated);
+  const extrasScopeKey = db.auth?.userId || "demo";
+
+  const mutateDemoDb = useCallback((updater: (prev: AppDatabase) => AppDatabase) => {
+    setDb((prev) => {
+      const next = recomputeGoalsClient(updater(prev));
+      saveDemoDb(next);
+      return next;
+    });
+  }, []);
+
+  const updateExtras = useCallback(
+    (updater: (prev: WorkspaceExtras) => WorkspaceExtras) => {
+      setExtras((prev) => {
+        const next = updater(prev);
+        saveWorkspaceExtras(extrasScopeKey, next);
+        return next;
+      });
+    },
+    [extrasScopeKey],
+  );
 
   // Serialized non-blocking background sync to Google Sheets
   const syncInFlightRef = useRef(false);
@@ -191,6 +241,9 @@ export function AppClient({ initialDb }: AppClientProps) {
     if (sheetsParam === "connected") {
       showToast("Google Sheets berhasil dihubungkan dan disinkronkan.");
       window.history.replaceState({}, "", "/");
+    } else if (sheetsParam === "auth_required") {
+      setGlobalError("Sesi login Anda berakhir. Silakan masuk ulang sebelum menghubungkan Google Sheets.");
+      window.history.replaceState({}, "", "/");
     } else if (sheetsParam === "error") {
       setGlobalError(
         db.sheetConnection.lastError ||
@@ -198,6 +251,16 @@ export function AppClient({ initialDb }: AppClientProps) {
       );
       window.history.replaceState({}, "", "/");
     }
+
+    if ("serviceWorker" in navigator && window.location.protocol === "https:") {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+    setIsOffline(!navigator.onLine);
+    setOfflineQueue(loadOfflineQueue());
+    const onOnline = () => setIsOffline(false);
+    const onOffline = () => setIsOffline(true);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
 
     if (window.location.hash.length > 1) {
       const hashParams = new URLSearchParams(window.location.hash.slice(1));
@@ -234,7 +297,15 @@ export function AppClient({ initialDb }: AppClientProps) {
         );
       }
     }
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
   }, []);
+
+  useEffect(() => {
+    setExtras(loadWorkspaceExtras(extrasScopeKey));
+  }, [extrasScopeKey]);
 
   const toggleDarkMode = () => {
     setDarkMode((prev) => {
@@ -445,11 +516,82 @@ export function AppClient({ initialDb }: AppClientProps) {
   };
   const errMsg = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
 
+  const flushOfflineQueue = useCallback(async () => {
+    if (isDemoMode || offlineQueue.length === 0) return;
+    if (typeof navigator !== "undefined" && !navigator.onLine) return;
+    try {
+      const batch = [...offlineQueue];
+      const next = await callApi(
+        "/api/transactions",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            items: batch.map((q) => ({
+              date: q.date,
+              type: q.type,
+              category: q.category,
+              accountId: q.accountId,
+              toAccountId: q.toAccountId,
+              amount: q.amount,
+              note: q.note,
+              source: "manual",
+            })),
+          }),
+        },
+        "Gagal mengirim antrean transaksi offline.",
+      );
+      setOfflineQueue([]);
+      saveOfflineQueue([]);
+      applyDbState(next);
+      showToast(`${batch.length} transaksi antrean offline berhasil terkirim.`);
+    } catch {
+      // Keep items queued until next online retry
+    }
+  }, [isDemoMode, offlineQueue]);
+
+  useEffect(() => {
+    if (!isOffline && offlineQueue.length > 0 && !isDemoMode) {
+      void flushOfflineQueue();
+    }
+  }, [isOffline, offlineQueue.length, isDemoMode, flushOfflineQueue]);
+
   const handleSubmitReconcile = async (payload: {
     accountId: string;
     actualBalance: number;
     note: string;
   }) => {
+    if (isDemoMode) {
+      const target = db.accounts.find((a) => a.id === payload.accountId);
+      if (!target) throw new Error("Pilih akun yang valid.");
+      const cur = accountBalanceMap[target.id] ?? 0;
+      const diff = Math.round(payload.actualBalance) - cur;
+      if (diff === 0) throw new Error(`Saldo ${target.name} sudah sesuai (${formatRupiah(cur)}).`);
+      const nowIso = new Date().toISOString();
+      mutateDemoDb((prev) => ({
+        ...prev,
+        transactions: [
+          {
+            id: `demo-rec-${Date.now()}`,
+            date: toIsoDate(),
+            type: "Koreksi",
+            category: diff > 0 ? "Koreksi Tambah" : "Koreksi Kurang",
+            accountId: target.id,
+            amount: Math.abs(diff),
+            note:
+              payload.note.trim() ||
+              `Koreksi ${target.name}: ${formatRupiah(cur)} ke ${formatRupiah(payload.actualBalance)}`,
+            source: "reconciliation",
+            sheetSyncStatus: "local_only",
+            createdAt: nowIso,
+            updatedAt: nowIso,
+          },
+          ...prev.transactions,
+        ],
+      }));
+      showToast("Saldo berhasil dikoreksi (Mode Demo).");
+      return;
+    }
     applyDbState(
       await callApi(
         "/api/transactions",
@@ -479,21 +621,149 @@ export function AppClient({ initialDb }: AppClientProps) {
     amount: number;
     note: string;
   }) => {
-    applyDbState(
-      await callApi(
-        "/api/transactions",
-        {
-          method: payload.id ? "PATCH" : "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        },
-        "Gagal menyimpan transaksi.",
-      ),
-    );
-    showToast(payload.id ? "Transaksi diperbarui." : "Transaksi disimpan.");
+    if (isDemoMode) {
+      const nowIso = new Date().toISOString();
+      mutateDemoDb((prev) => {
+        if (payload.id) {
+          return {
+            ...prev,
+            transactions: prev.transactions.map((t) =>
+              t.id === payload.id
+                ? {
+                    ...t,
+                    date: payload.date,
+                    type: payload.type,
+                    category: payload.category,
+                    accountId: payload.accountId,
+                    toAccountId: payload.type === "Transfer" ? payload.toAccountId : undefined,
+                    amount: payload.amount,
+                    note: payload.note,
+                    updatedAt: nowIso,
+                  }
+                : t,
+            ),
+          };
+        }
+        return {
+          ...prev,
+          transactions: [
+            {
+              id: `demo-tx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              date: payload.date,
+              type: payload.type,
+              category: payload.category,
+              accountId: payload.accountId,
+              toAccountId: payload.type === "Transfer" ? payload.toAccountId : undefined,
+              amount: payload.amount,
+              note: payload.note,
+              source: "manual",
+              sheetSyncStatus: "local_only",
+              createdAt: nowIso,
+              updatedAt: nowIso,
+            },
+            ...prev.transactions,
+          ],
+        };
+      });
+      showToast(payload.id ? "Transaksi diperbarui." : "Transaksi disimpan (Mode Demo).");
+      return;
+    }
+
+    const queueOfflineTx = () => {
+      const nowIso = new Date().toISOString();
+      const tempId = `offline-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const item: QueuedTransactionPayload = {
+        clientTempId: tempId,
+        date: payload.date,
+        type: payload.type,
+        category: payload.category,
+        accountId: payload.accountId,
+        toAccountId: payload.type === "Transfer" ? payload.toAccountId : undefined,
+        amount: payload.amount,
+        note: payload.note,
+        createdAt: nowIso,
+      };
+      setOfflineQueue((prev) => {
+        const nextQueue = [...prev, item];
+        saveOfflineQueue(nextQueue);
+        return nextQueue;
+      });
+      setDb((prev) => ({
+        ...prev,
+        transactions: [
+          {
+            id: tempId,
+            date: payload.date,
+            type: payload.type,
+            category: payload.category,
+            accountId: payload.accountId,
+            toAccountId: payload.type === "Transfer" ? payload.toAccountId : undefined,
+            amount: payload.amount,
+            note: payload.note ? `${payload.note} (Offline)` : "(Antrean Offline)",
+            source: "manual",
+            sheetSyncStatus: "pending",
+            createdAt: nowIso,
+            updatedAt: nowIso,
+          },
+          ...prev.transactions,
+        ],
+      }));
+      showToast("Sedang offline: transaksi masuk antrean dan akan terkirim saat sinyal kembali.");
+    };
+
+    if (!payload.id && typeof navigator !== "undefined" && !navigator.onLine) {
+      queueOfflineTx();
+      return;
+    }
+
+    try {
+      applyDbState(
+        await callApi(
+          "/api/transactions",
+          {
+            method: payload.id ? "PATCH" : "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          },
+          "Gagal menyimpan transaksi.",
+        ),
+      );
+      showToast(payload.id ? "Transaksi diperbarui." : "Transaksi disimpan.");
+    } catch (err) {
+      if (!payload.id && err instanceof TypeError) {
+        queueOfflineTx();
+        return;
+      }
+      throw err;
+    }
   };
 
   const handleSaveBatch = async (drafts: ParsedTransactionDraft[]) => {
+    if (isDemoMode) {
+      const nowIso = new Date().toISOString();
+      mutateDemoDb((prev) => ({
+        ...prev,
+        transactions: [
+          ...drafts.map((d, i) => ({
+            id: `demo-ai-${Date.now()}-${i}`,
+            date: d.date,
+            type: d.type,
+            category: d.category,
+            accountId: d.accountId,
+            toAccountId: d.toAccountId,
+            amount: d.amount,
+            note: d.note,
+            source: "ai_text" as const,
+            sheetSyncStatus: "local_only" as const,
+            createdAt: nowIso,
+            updatedAt: nowIso,
+          })),
+          ...prev.transactions,
+        ],
+      }));
+      showToast(`${drafts.length} transaksi dari AI berhasil dicatat (Mode Demo).`);
+      return;
+    }
     applyDbState(
       await callApi(
         "/api/transactions",
@@ -520,6 +790,15 @@ export function AppClient({ initialDb }: AppClientProps) {
   };
 
   const handleDeleteTx = async (id: string) => {
+    if (isDemoMode) {
+      mutateDemoDb((prev) => ({
+        ...prev,
+        transactions: prev.transactions.filter((t) => t.id !== id),
+      }));
+      setConfirmDeleteTxId(null);
+      showToast("Transaksi dihapus.");
+      return;
+    }
     setBusyAction(true);
     try {
       applyDbState(
@@ -538,8 +817,19 @@ export function AppClient({ initialDb }: AppClientProps) {
     }
   };
 
-  // Called from TransactionSheet, which shows the thrown error inside the sheet.
   const handleAddCategory = async (name: string, type: "Masuk" | "Keluar", iconKey: string) => {
+    if (isDemoMode) {
+      const clean = name.trim().slice(0, 40);
+      if (!clean) throw new Error("Nama kategori wajib diisi.");
+      if (db.categories.some((c) => c.type === type && c.name.toLowerCase() === clean.toLowerCase())) {
+        throw new Error(`Kategori "${clean}" sudah ada.`);
+      }
+      mutateDemoDb((prev) => ({
+        ...prev,
+        categories: [...prev.categories, { id: `demo-cat-${Date.now()}`, name: clean, type, iconKey }],
+      }));
+      return;
+    }
     setDb(
       await callApi(
         "/api/state",
@@ -562,6 +852,28 @@ export function AppClient({ initialDb }: AppClientProps) {
     categoryId: string,
     updates: { name?: string; iconKey?: string },
   ) => {
+    if (isDemoMode) {
+      mutateDemoDb((prev) => {
+        const target = prev.categories.find((c) => c.id === categoryId);
+        if (!target) return prev;
+        const nextName = updates.name?.trim().slice(0, 40) || target.name;
+        return {
+          ...prev,
+          categories: prev.categories.map((c) =>
+            c.id === categoryId ? { ...c, name: nextName, iconKey: updates.iconKey ?? c.iconKey } : c,
+          ),
+          transactions:
+            nextName !== target.name
+              ? prev.transactions.map((tx) =>
+                  tx.type === target.type && tx.category === target.name
+                    ? { ...tx, category: nextName }
+                    : tx,
+                )
+              : prev.transactions,
+        };
+      });
+      return;
+    }
     applyDbState(
       await callApi(
         "/api/state",
@@ -581,6 +893,25 @@ export function AppClient({ initialDb }: AppClientProps) {
   };
 
   const handleDeleteCategory = async (categoryId: string, replacementCategory?: string) => {
+    if (isDemoMode) {
+      mutateDemoDb((prev) => {
+        const target = prev.categories.find((c) => c.id === categoryId);
+        if (!target) return prev;
+        const remaining = prev.categories.filter((c) => c.id !== categoryId);
+        const fallback =
+          replacementCategory || remaining.find((c) => c.type === target.type)?.name || "Lain-lain";
+        return {
+          ...prev,
+          categories: remaining,
+          transactions: prev.transactions.map((tx) =>
+            tx.type === target.type && tx.category === target.name
+              ? { ...tx, category: fallback }
+              : tx,
+          ),
+        };
+      });
+      return;
+    }
     applyDbState(
       await callApi(
         "/api/state",
@@ -599,6 +930,21 @@ export function AppClient({ initialDb }: AppClientProps) {
   };
 
   const handleReorderCategories = async (type: "Masuk" | "Keluar", orderedIds: string[]) => {
+    if (isDemoMode) {
+      mutateDemoDb((prev) => {
+        const sameType = prev.categories.filter((c) => c.type === type);
+        const byId = new Map(sameType.map((c) => [c.id, c]));
+        const reordered = orderedIds
+          .map((id) => byId.get(id))
+          .filter((c): c is NonNullable<typeof c> => Boolean(c));
+        const others = prev.categories.filter((c) => c.type !== type);
+        return {
+          ...prev,
+          categories: type === "Keluar" ? [...reordered, ...others] : [...others, ...reordered],
+        };
+      });
+      return;
+    }
     setDb(
       await callApi(
         "/api/state",
@@ -617,6 +963,14 @@ export function AppClient({ initialDb }: AppClientProps) {
   };
 
   const handleLoadSimulation = async () => {
+    if (isDemoMode) {
+      mutateDemoDb((prev) => ({
+        ...prev,
+        transactions: [...buildDemoSampleTransactions(), ...prev.transactions],
+      }));
+      showToast("Data simulasi contoh dimuat.");
+      return;
+    }
     setBusyAction(true);
     try {
       applyDbState(
@@ -639,11 +993,163 @@ export function AppClient({ initialDb }: AppClientProps) {
     }
   };
 
+  const handleSaveSettings = async (payload: {
+    monthlyBudget: number;
+    paydayDay: number;
+    categoryPreset: WorkspaceSettings["categoryPreset"];
+    initialBalances: Record<string, number>;
+  }) => {
+    if (isDemoMode) {
+      mutateDemoDb((prev) => ({
+        ...prev,
+        settings: {
+          ...prev.settings,
+          monthlyBudget: payload.monthlyBudget,
+          paydayDay: payload.paydayDay,
+          categoryPreset: payload.categoryPreset,
+        },
+        accounts: prev.accounts.map((acc) => ({
+          ...acc,
+          initialBalance: payload.initialBalances[acc.id] ?? acc.initialBalance,
+        })),
+      }));
+      showToast("Pengaturan anggaran & saldo awal diperbarui (Mode Demo).");
+      return;
+    }
+    const next = await callApi(
+      "/api/state",
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+      "Gagal menyimpan pengaturan.",
+    );
+    setDb(next);
+    showToast("Pengaturan anggaran, saldo awal, dan kategori diperbarui.");
+  };
+
+  const handleAddAccount = async (name: string, kind: AccountKind, initialBalance: number) => {
+    if (isDemoMode) {
+      const clean = name.trim().slice(0, 40);
+      if (!clean) throw new Error("Nama dompet wajib diisi.");
+      if (db.accounts.some((a) => a.name.toLowerCase() === clean.toLowerCase())) {
+        throw new Error(`Dompet "${clean}" sudah ada.`);
+      }
+      mutateDemoDb((prev) => ({
+        ...prev,
+        accounts: [
+          ...prev.accounts,
+          { id: `demo-acc-${Date.now()}`, name: clean, kind, initialBalance: Math.max(0, initialBalance) },
+        ],
+      }));
+      showToast(`Dompet "${clean}" ditambahkan.`);
+      return;
+    }
+    const next = await callApi(
+      "/api/state",
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "add_account",
+          accountName: name,
+          accountKind: kind,
+          accountInitialBalance: initialBalance,
+        }),
+      },
+      "Gagal menambah dompet.",
+    );
+    setDb(next);
+    showToast(`Dompet "${name.trim()}" ditambahkan.`);
+  };
+
+  const handleDeleteAccount = async (accountId: string) => {
+    const acc = db.accounts.find((a) => a.id === accountId);
+    if (
+      !window.confirm(
+        `Hapus dompet "${acc?.name ?? ""}"? Transaksi yang memakai dompet ini akan dipindahkan ke dompet lain yang tersisa.`,
+      )
+    ) {
+      return;
+    }
+    if (isDemoMode) {
+      if (db.accounts.length <= 1) throw new Error("Minimal harus ada 1 dompet aktif.");
+      const fallback = db.accounts.find((a) => a.id !== accountId)!;
+      mutateDemoDb((prev) => ({
+        ...prev,
+        accounts: prev.accounts.filter((a) => a.id !== accountId),
+        transactions: prev.transactions.map((tx) => ({
+          ...tx,
+          accountId: tx.accountId === accountId ? fallback.id : tx.accountId,
+          toAccountId:
+            tx.toAccountId === accountId
+              ? fallback.id === tx.accountId
+                ? undefined
+                : fallback.id
+              : tx.toAccountId,
+        })),
+      }));
+      showToast("Dompet dihapus.");
+      return;
+    }
+    const next = await callApi(
+      "/api/state",
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete_account", accountId }),
+      },
+      "Gagal menghapus dompet.",
+    );
+    applyDbState(next);
+    showToast("Dompet dihapus.");
+  };
+
+  const handleClearAll = async () => {
+    if (isDemoMode) {
+      mutateDemoDb((prev) => ({ ...prev, transactions: [], goals: [] }));
+      showToast("Semua transaksi dan target dibersihkan.");
+      return;
+    }
+    const next = await callApi(
+      "/api/state",
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "clear_all_data" }),
+      },
+      "Gagal menghapus semua data.",
+    );
+    setDb(next);
+    showToast("Semua transaksi dan target dibersihkan.");
+  };
+
   const handleCreateGoal = async (e: React.FormEvent) => {
     e.preventDefault();
     const targetAmount = parseInt(goalTargetRaw.replace(/\D/g, ""), 10) || 0;
     if (!goalName.trim() || targetAmount <= 0) {
       setModalError("Isi nama target dan nominal lebih dari Rp 0.");
+      return;
+    }
+    if (isDemoMode) {
+      mutateDemoDb((prev) => ({
+        ...prev,
+        goals: [
+          ...prev.goals,
+          {
+            id: `demo-goal-${Date.now()}`,
+            name: goalName.trim().slice(0, 60),
+            targetAmount,
+            currentAmount: 0,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      }));
+      setGoalModalOpen(false);
+      setGoalName("");
+      setGoalTargetRaw("");
+      showToast("Target tabungan dibuat.");
       return;
     }
     setBusyAction(true);
@@ -676,6 +1182,35 @@ export function AppClient({ initialDb }: AppClientProps) {
     const amount = parseInt(depositRaw.replace(/\D/g, ""), 10) || 0;
     if (!depositModalGoalId || amount <= 0) {
       setModalError("Masukkan nominal setoran lebih dari Rp 0.");
+      return;
+    }
+    if (isDemoMode) {
+      const goal = db.goals.find((g) => g.id === depositModalGoalId);
+      if (!goal) return;
+      const nowIso = new Date().toISOString();
+      mutateDemoDb((prev) => ({
+        ...prev,
+        transactions: [
+          {
+            id: `demo-dep-${Date.now()}`,
+            date: toIsoDate(),
+            type: "Keluar",
+            category: "Tabungan",
+            accountId: depositAccountId,
+            amount,
+            note: `Setor target: ${goal.name}`,
+            goalId: goal.id,
+            source: "manual",
+            sheetSyncStatus: "local_only",
+            createdAt: nowIso,
+            updatedAt: nowIso,
+          },
+          ...prev.transactions,
+        ],
+      }));
+      setDepositModalGoalId(null);
+      setDepositRaw("");
+      showToast("Setoran tabungan berhasil dicatat.");
       return;
     }
     setBusyAction(true);
@@ -716,6 +1251,15 @@ export function AppClient({ initialDb }: AppClientProps) {
     ) {
       return;
     }
+    if (isDemoMode) {
+      mutateDemoDb((prev) => ({
+        ...prev,
+        goals: prev.goals.filter((g) => g.id !== id),
+        transactions: prev.transactions.filter((t) => t.goalId !== id),
+      }));
+      showToast("Target tabungan dihapus.");
+      return;
+    }
     setBusyAction(true);
     try {
       applyDbState(
@@ -733,6 +1277,86 @@ export function AppClient({ initialDb }: AppClientProps) {
     }
   };
 
+  const handleAddRecurring = (e: React.FormEvent) => {
+    e.preventDefault();
+    const amount = parseInt(recAmountRaw.replace(/\D/g, ""), 10) || 0;
+    const cleanName = recName.trim().slice(0, 50);
+    if (!cleanName || amount <= 0) {
+      showToast("Isi nama dan nominal jadwal rutin terlebih dahulu.");
+      return;
+    }
+    const day = Math.min(28, Math.max(1, parseInt(recDay, 10) || 1));
+    const item: RecurringTemplate = {
+      id: `rec-${Date.now()}`,
+      name: cleanName,
+      type: recType,
+      category: recCategory,
+      accountId: recAccountId,
+      amount,
+      dayOfMonth: day,
+    };
+    updateExtras((prev) => ({ ...prev, recurring: [...prev.recurring, item] }));
+    setRecName("");
+    setRecAmountRaw("");
+    showToast(`Jadwal rutin "${cleanName}" disimpan.`);
+  };
+
+  const handleApplyRecurring = async (item: RecurringTemplate) => {
+    const todayIso = toIsoDate();
+    const ym = todayIso.slice(0, 7);
+    try {
+      await handleSaveSingle({
+        date: todayIso,
+        type: item.type,
+        category: item.category,
+        accountId: db.accounts.some((a) => a.id === item.accountId)
+          ? item.accountId
+          : db.accounts[0]?.id || "acc-cash",
+        amount: item.amount,
+        note: `[Rutin] ${item.name}`,
+      });
+      updateExtras((prev) => ({
+        ...prev,
+        recurring: prev.recurring.map((r) =>
+          r.id === item.id ? { ...r, lastRecordedMonth: ym } : r,
+        ),
+      }));
+    } catch (err) {
+      setGlobalError(errMsg(err, "Gagal mencatat transaksi rutin."));
+    }
+  };
+
+  const handleDeleteRecurring = (id: string) => {
+    updateExtras((prev) => ({
+      ...prev,
+      recurring: prev.recurring.filter((r) => r.id !== id),
+    }));
+    showToast("Jadwal rutin dihapus.");
+  };
+
+  const handleSaveCategoryBudget = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cap = parseInt(budgetCatCapRaw.replace(/\D/g, ""), 10) || 0;
+    if (!budgetCatName || cap <= 0) {
+      showToast("Masukkan batas nominal kategori lebih dari Rp 0.");
+      return;
+    }
+    updateExtras((prev) => ({
+      ...prev,
+      categoryBudgets: { ...prev.categoryBudgets, [budgetCatName]: cap },
+    }));
+    setBudgetCatCapRaw("");
+    showToast(`Batas bulanan ${budgetCatName} disimpan.`);
+  };
+
+  const handleDeleteCategoryBudget = (catName: string) => {
+    updateExtras((prev) => {
+      const nextCaps = { ...prev.categoryBudgets };
+      delete nextCaps[catName];
+      return { ...prev, categoryBudgets: nextCaps };
+    });
+  };
+
   const handleExportCsv = () => {
     if (filteredTransactions.length === 0) {
       showToast("Tidak ada transaksi pada filter aktif untuk diekspor.");
@@ -742,9 +1366,16 @@ export function AppClient({ initialDb }: AppClientProps) {
     const lines = [headers.join(",")];
     for (const tx of filteredTransactions) {
       const acc = db.accounts.find((a) => a.id === tx.accountId)?.name || tx.accountId;
-      const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
       lines.push(
-        [esc(tx.id), esc(tx.date), esc(tx.type), esc(tx.category), esc(acc), String(tx.amount), esc(tx.note)].join(","),
+        [
+          escapeCsvCell(tx.id),
+          escapeCsvCell(tx.date),
+          escapeCsvCell(tx.type),
+          escapeCsvCell(tx.category),
+          escapeCsvCell(acc),
+          String(tx.amount),
+          escapeCsvCell(tx.note),
+        ].join(","),
       );
     }
     const blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
@@ -762,6 +1393,18 @@ export function AppClient({ initialDb }: AppClientProps) {
     const q = questionText.trim();
     if (!q) return;
     setAskInput(q);
+    if (isDemoMode) {
+      setAskAnswer(
+        answerFinancialQuestion(
+          q,
+          db.transactions,
+          db.accounts,
+          db.settings.monthlyBudget,
+          db.settings.paydayDay,
+        ),
+      );
+      return;
+    }
     setAskLoading(true);
     try {
       const res = await fetch("/api/ai/parse", {
@@ -769,8 +1412,25 @@ export function AppClient({ initialDb }: AppClientProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode: "ask", question: q }),
       });
-      const data = (await res.json().catch(() => ({}))) as { answer?: string; error?: string };
-      setAskAnswer(data.answer || data.error || "Belum bisa memproses pertanyaan. Coba lagi.");
+      const data = (await res.json().catch(() => ({}))) as {
+        answer?: string;
+        error?: string;
+        warning?: string;
+        aiCreditsRemaining?: number;
+      };
+      if (typeof data.aiCreditsRemaining === "number") {
+        setDb((prev) => ({
+          ...prev,
+          settings: { ...prev.settings, aiCreditsRemaining: data.aiCreditsRemaining },
+        }));
+      }
+      setAskAnswer(
+        data.answer
+          ? data.warning
+            ? `${data.answer}\n(${data.warning})`
+            : data.answer
+          : data.error || "Belum bisa memproses pertanyaan. Coba lagi.",
+      );
     } catch {
       setAskAnswer("Tidak bisa terhubung ke server. Periksa koneksi lalu coba lagi.");
     } finally {
@@ -826,8 +1486,9 @@ export function AppClient({ initialDb }: AppClientProps) {
           showToast(msg);
         }}
         onEnterDemo={() => {
+          setDb((prev) => loadDemoDb(prev));
           setDemoBypass(true);
-          showToast("Mode Demo dibuka. Masuk akun kapan saja untuk menyimpan.");
+          showToast("Mode Demo pribadi dibuka di browser ini. Masuk akun kapan saja untuk menyimpan.");
         }}
       />
     );
@@ -997,7 +1658,7 @@ export function AppClient({ initialDb }: AppClientProps) {
             {db.auth?.configured && !db.auth?.authenticated && demoBypass && (
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-soft)] px-4 py-2.5 text-xs font-bold text-[var(--text-primary)]">
                 <span>
-                  Mode Demo Tamu: catatan bersifat sementara dan belum tersimpan ke akun Anda.
+                  Mode Demo Pribadi: tersimpan lokal di browser ini. Masuk akun untuk sinkron Cloud &amp; Sheets.
                 </span>
                 <button
                   type="button"
@@ -1008,6 +1669,57 @@ export function AppClient({ initialDb }: AppClientProps) {
                 </button>
               </div>
             )}
+            {(isOffline || offlineQueue.length > 0) && !isDemoMode && (
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[#D97706] bg-[#FEF3C7] px-4 py-2.5 text-xs font-bold text-[#92400E] dark:bg-[#451A03] dark:text-[#FDE68A]">
+                <span>
+                  {isOffline
+                    ? `Mode Offline aktif.${offlineQueue.length > 0 ? ` ${offlineQueue.length} transaksi menunggu koneksi.` : " Transaksi baru akan masuk antrean otomatis."}`
+                    : `${offlineQueue.length} transaksi antrean offline siap dikirim.`}
+                </span>
+                {!isOffline && offlineQueue.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => void flushOfflineQueue()}
+                    className="min-h-[36px] rounded-lg bg-[#92400E] px-3 text-xs font-extrabold text-white hover:bg-[#78350F]"
+                  >
+                    Kirim Sekarang
+                  </button>
+                )}
+              </div>
+            )}
+            {(() => {
+              const todayDay = new Date().getDate();
+              const dueItems = extras.recurring.filter(
+                (r) => r.dayOfMonth <= todayDay && r.lastRecordedMonth !== currentMonthPrefix,
+              );
+              if (dueItems.length === 0) return null;
+              const first = dueItems[0];
+              return (
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] px-4 py-2.5 text-xs">
+                  <span className="font-bold text-[var(--text-primary)]">
+                    Jadwal rutin bulan ini:{" "}
+                    <strong>{first.name}</strong> ({displayMoney(first.amount)})
+                    {dueItems.length > 1 ? ` +${dueItems.length - 1} lainnya` : ""}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleApplyRecurring(first)}
+                      className="min-h-[34px] rounded-lg bg-[var(--brand-primary)] px-3 text-xs font-extrabold text-white hover:bg-[var(--brand-hover)]"
+                    >
+                      Catat 1 Klik
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("tabungan")}
+                      className="min-h-[34px] rounded-lg border border-[var(--border-subtle)] px-2.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--bg-soft)]"
+                    >
+                      Kelola
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
             {toast && (
               <div
                 role="status"
@@ -1176,26 +1888,26 @@ export function AppClient({ initialDb }: AppClientProps) {
 
                     {/* Multi-Wallet Balances */}
                     <div>
-                      <div className="flex items-center justify-between gap-2">
-                        <h2 className="text-xs font-extrabold text-[var(--text-primary)]">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h2 className="whitespace-nowrap text-xs font-extrabold text-[var(--text-primary)]">
                           Saldo per Akun
                         </h2>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
                           {db.transactions.length > 0 ||
                           accountBalances.some((a) => a.balance !== 0) ? (
                             <button
                               type="button"
                               onClick={() => openReconcile()}
-                              className="flex min-h-[32px] items-center gap-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2 text-[11px] font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
+                              className="flex min-h-[32px] items-center gap-1 whitespace-nowrap rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2 text-[11px] font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
                             >
-                              <ScaleIcon className="h-3 w-3" />
+                              <ScaleIcon className="h-3 w-3 shrink-0" />
                               Koreksi
                             </button>
                           ) : (
                             <button
                               type="button"
                               onClick={() => openSheetsTab("atur")}
-                              className="flex min-h-[32px] items-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2 text-[11px] font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
+                              className="flex min-h-[32px] items-center whitespace-nowrap rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2 text-[11px] font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
                             >
                               Saldo Awal
                             </button>
@@ -1203,10 +1915,17 @@ export function AppClient({ initialDb }: AppClientProps) {
                           <button
                             type="button"
                             onClick={() => openNewTx("manual", "Transfer")}
-                            className="flex min-h-[32px] items-center gap-1 rounded-lg bg-[var(--bg-soft)] px-2 text-[11px] font-bold text-[var(--brand-primary)] dark:text-[#fda4af]"
+                            className="flex min-h-[32px] items-center gap-1 whitespace-nowrap rounded-lg bg-[var(--bg-soft)] px-2 text-[11px] font-bold text-[var(--brand-primary)] dark:text-[#fda4af]"
                           >
-                            <TransferIcon className="h-3 w-3" />
+                            <TransferIcon className="h-3 w-3 shrink-0" />
                             Transfer
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openSheetsTab("atur")}
+                            className="flex min-h-[32px] items-center whitespace-nowrap rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2 text-[11px] font-bold text-[var(--text-muted)] hover:bg-[var(--bg-soft)] hover:text-[var(--text-primary)]"
+                          >
+                            + Dompet
                           </button>
                         </div>
                       </div>
@@ -1692,6 +2411,139 @@ export function AppClient({ initialDb }: AppClientProps) {
                   })}
                 </div>
               )}
+
+              {/* Recurring Monthly Templates */}
+              <section className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-4 sm:p-5">
+                <div className="mb-3">
+                  <h2 className="text-sm font-extrabold text-[var(--text-primary)]">
+                    Jadwal Transaksi Rutin Bulanan
+                  </h2>
+                  <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                    Simpan gaji, kos, WiFi, atau cicilan tetap agar bisa dicatat 1 klik tiap bulan.
+                  </p>
+                </div>
+
+                <form onSubmit={handleAddRecurring} className="grid grid-cols-1 gap-2 sm:grid-cols-6">
+                  <input
+                    type="text"
+                    value={recName}
+                    onChange={(e) => setRecName(e.target.value)}
+                    placeholder="Nama (mis. WiFi / Gaji)"
+                    className="min-h-[40px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-xs font-bold text-[var(--text-primary)] sm:col-span-2"
+                  />
+                  <select
+                    value={recType}
+                    onChange={(e) => {
+                      const nextT = e.target.value === "Masuk" ? "Masuk" : "Keluar";
+                      setRecType(nextT);
+                      const first = db.categories.find((c) => c.type === nextT);
+                      if (first) setRecCategory(first.name);
+                    }}
+                    aria-label="Jenis rutin"
+                    className="min-h-[40px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 text-xs font-bold text-[var(--text-primary)]"
+                  >
+                    <option value="Keluar">Keluar</option>
+                    <option value="Masuk">Masuk</option>
+                  </select>
+                  <select
+                    value={recCategory}
+                    onChange={(e) => setRecCategory(e.target.value)}
+                    aria-label="Kategori rutin"
+                    className="min-h-[40px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 text-xs font-bold text-[var(--text-primary)]"
+                  >
+                    {db.categories
+                      .filter((c) => c.type === recType)
+                      .map((c) => (
+                        <option key={c.id} value={c.name}>
+                          {c.name}
+                        </option>
+                      ))}
+                  </select>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={
+                      recAmountRaw
+                        ? (parseInt(recAmountRaw.replace(/\D/g, ""), 10) || 0).toLocaleString("id-ID")
+                        : ""
+                    }
+                    onChange={(e) => setRecAmountRaw(e.target.value.replace(/\D/g, ""))}
+                    placeholder="Nominal Rp"
+                    className="min-h-[40px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-xs font-bold text-[var(--text-primary)] tabular-nums"
+                  />
+                  <div className="flex gap-1.5">
+                    <input
+                      type="number"
+                      min={1}
+                      max={28}
+                      value={recDay}
+                      onChange={(e) => setRecDay(e.target.value)}
+                      aria-label="Tanggal tiap bulan"
+                      title="Tanggal tiap bulan (1-28)"
+                      className="min-h-[40px] w-14 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2 text-center text-xs font-bold text-[var(--text-primary)] tabular-nums"
+                    />
+                    <button
+                      type="submit"
+                      className="min-h-[40px] flex-1 rounded-xl bg-[var(--brand-primary)] px-3 text-xs font-extrabold text-white hover:bg-[var(--brand-hover)]"
+                    >
+                      Tambah
+                    </button>
+                  </div>
+                </form>
+
+                {extras.recurring.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {extras.recurring.map((item) => {
+                      const doneThisMonth = item.lastRecordedMonth === currentMonthPrefix;
+                      return (
+                        <div
+                          key={item.id}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 py-2.5 text-xs"
+                        >
+                          <div className="min-w-0">
+                            <p className="font-extrabold text-[var(--text-primary)]">
+                              {item.name}{" "}
+                              <span className="font-semibold text-[var(--text-muted)]">
+                                · Tgl {item.dayOfMonth} · {item.category}
+                              </span>
+                            </p>
+                            <p
+                              className={`mt-0.5 font-bold tabular-nums ${
+                                item.type === "Masuk"
+                                  ? "text-[var(--income-text)]"
+                                  : "text-[var(--expense-text)]"
+                              }`}
+                            >
+                              {item.type === "Masuk" ? "+" : "-"}
+                              {displayMoney(item.amount)}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => void handleApplyRecurring(item)}
+                              className={`min-h-[34px] rounded-lg px-3 text-xs font-bold ${
+                                doneThisMonth
+                                  ? "border border-[var(--border-subtle)] bg-[var(--bg-card)] text-[var(--text-muted)]"
+                                  : "bg-[var(--brand-primary)] text-white hover:bg-[var(--brand-hover)]"
+                              }`}
+                            >
+                              {doneThisMonth ? "Tercatat" : "Catat Sekarang"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteRecurring(item.id)}
+                              className="min-h-[34px] rounded-lg px-2 text-xs font-bold text-[var(--expense-text)] hover:bg-[var(--expense-bg)]"
+                            >
+                              Hapus
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
             </div>
           )}
 
@@ -1815,6 +2667,103 @@ export function AppClient({ initialDb }: AppClientProps) {
                   <span>Terpakai: {displayMoney(allowance.spentInCycle)}</span>
                   <span>Sisa: {displayMoney(allowance.remainingBudget)}</span>
                 </div>
+              </section>
+
+              {/* Per-Category Budget Caps */}
+              <section className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-4 sm:p-5">
+                <div className="mb-3">
+                  <h2 className="text-sm font-extrabold text-[var(--text-primary)]">
+                    Batas Anggaran per Kategori
+                  </h2>
+                  <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                    Pasang plafon khusus untuk kategori rawan boros (mis. Makan &amp; Minum atau Belanja).
+                  </p>
+                </div>
+
+                <form onSubmit={handleSaveCategoryBudget} className="flex flex-wrap gap-2">
+                  <select
+                    value={budgetCatName}
+                    onChange={(e) => setBudgetCatName(e.target.value)}
+                    aria-label="Pilih kategori batas anggaran"
+                    className="min-h-[40px] flex-1 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-xs font-bold text-[var(--text-primary)]"
+                  >
+                    {db.categories
+                      .filter((c) => c.type === "Keluar")
+                      .map((c) => (
+                        <option key={c.id} value={c.name}>
+                          {c.name}
+                        </option>
+                      ))}
+                  </select>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={
+                      budgetCatCapRaw
+                        ? (parseInt(budgetCatCapRaw.replace(/\D/g, ""), 10) || 0).toLocaleString("id-ID")
+                        : ""
+                    }
+                    onChange={(e) => setBudgetCatCapRaw(e.target.value.replace(/\D/g, ""))}
+                    placeholder="Batas / periode (Rp)"
+                    className="min-h-[40px] w-44 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-xs font-bold text-[var(--text-primary)] tabular-nums"
+                  />
+                  <button
+                    type="submit"
+                    className="min-h-[40px] rounded-xl bg-[var(--brand-primary)] px-4 text-xs font-extrabold text-white hover:bg-[var(--brand-hover)]"
+                  >
+                    Pasang Batas
+                  </button>
+                </form>
+
+                {Object.keys(extras.categoryBudgets).length > 0 && (
+                  <div className="mt-3.5 space-y-2.5">
+                    {Object.entries(extras.categoryBudgets).map(([catName, cap]) => {
+                      const spent =
+                        statMetrics.expenseByCategory.find((s) => s.name === catName)?.amount ?? 0;
+                      const pct = cap > 0 ? Math.min(100, Math.round((spent / cap) * 100)) : 0;
+                      const over = spent > cap;
+                      return (
+                        <div key={catName} className="rounded-xl bg-[var(--bg-canvas)] p-3">
+                          <div className="flex items-center justify-between gap-2 text-xs">
+                            <span className="font-extrabold text-[var(--text-primary)]">
+                              {catName}
+                            </span>
+                            <div className="flex items-center gap-2 tabular-nums">
+                              <span
+                                className={
+                                  over
+                                    ? "font-extrabold text-[var(--expense-text)]"
+                                    : "font-bold text-[var(--text-muted)]"
+                                }
+                              >
+                                {displayMoney(spent)} / {displayMoney(cap)} ({pct}%)
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteCategoryBudget(catName)}
+                                className="text-[11px] font-bold text-[var(--expense-text)] hover:underline"
+                              >
+                                Hapus
+                              </button>
+                            </div>
+                          </div>
+                          <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[var(--bg-soft)]">
+                            <div
+                              className={`h-full rounded-full transition-all duration-300 ${
+                                over || pct > 90
+                                  ? "bg-[#BE123C]"
+                                  : pct > 70
+                                    ? "bg-[#D97706]"
+                                    : "bg-[#047857]"
+                              }`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </section>
 
               {/* Dual Category Donut Charts: Income + Expense */}
@@ -2012,11 +2961,16 @@ export function AppClient({ initialDb }: AppClientProps) {
       <SheetsDrawer
         open={sheetsOpen}
         initialTab={sheetsInitialTab}
+        isDemoMode={isDemoMode}
         db={db}
         themeColor={themeColor}
         onChangeTheme={handleChangeTheme}
         onClose={() => setSheetsOpen(false)}
         onStateUpdated={setDb}
+        onSaveSettings={handleSaveSettings}
+        onAddAccount={handleAddAccount}
+        onDeleteAccount={handleDeleteAccount}
+        onClearAll={handleClearAll}
         onTriggerSync={triggerBackgroundSync}
         onNotify={showToast}
       />

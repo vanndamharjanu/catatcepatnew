@@ -1,9 +1,11 @@
+import { randomUUID } from "node:crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { toIsoDate } from "@/lib/finance";
+import { secureCookieOptions } from "@/lib/security";
 import {
   createInitialDb,
   readAsyncDb,
-  readDb,
   recomputeGoalAmounts,
   toPublicState,
   writeAsyncDb,
@@ -19,6 +21,87 @@ import {
   signUpWithSupabasePassword,
   writeSupabaseWorkspaceDelta,
 } from "@/lib/supabase";
+import type { Account, SavingGoal, Transaction, TransactionType } from "@/lib/types";
+
+function sanitizeClientTransactions(rawList: unknown, accounts: Account[]): Transaction[] {
+  if (!Array.isArray(rawList)) return [];
+  const validAccIds = new Set(accounts.map((a) => a.id));
+  const fallbackAccId = accounts[0]?.id || "acc-cash";
+  const nowIso = new Date().toISOString();
+  const out: Transaction[] = [];
+
+  for (const item of rawList.slice(0, 500)) {
+    if (!item || typeof item !== "object") continue;
+    const tx = item as Partial<Transaction>;
+    const amount = Math.round(Number(tx.amount) || 0);
+    if (amount <= 0) continue;
+    const type: TransactionType =
+      tx.type === "Masuk" || tx.type === "Transfer" || tx.type === "Koreksi"
+        ? tx.type
+        : "Keluar";
+    const date =
+      typeof tx.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(tx.date)
+        ? tx.date
+        : toIsoDate();
+    const accountId =
+      typeof tx.accountId === "string" && validAccIds.has(tx.accountId)
+        ? tx.accountId
+        : fallbackAccId;
+    const toAccountId =
+      type === "Transfer" &&
+      typeof tx.toAccountId === "string" &&
+      validAccIds.has(tx.toAccountId) &&
+      tx.toAccountId !== accountId
+        ? tx.toAccountId
+        : undefined;
+    if (type === "Transfer" && !toAccountId) continue;
+
+    out.push({
+      id: typeof tx.id === "string" && tx.id.trim() ? tx.id.trim().slice(0, 64) : randomUUID(),
+      date,
+      type,
+      category:
+        typeof tx.category === "string" && tx.category.trim()
+          ? tx.category.trim().slice(0, 50)
+          : "Lain-lain",
+      accountId,
+      toAccountId,
+      amount,
+      note: typeof tx.note === "string" ? tx.note.trim().slice(0, 200) : "",
+      goalId: typeof tx.goalId === "string" ? tx.goalId.slice(0, 64) : undefined,
+      source: "manual",
+      sheetSyncStatus: "local_only",
+      createdAt: typeof tx.createdAt === "string" ? tx.createdAt : nowIso,
+      updatedAt: typeof tx.updatedAt === "string" ? tx.updatedAt : nowIso,
+    });
+  }
+  return out;
+}
+
+function sanitizeClientGoals(rawList: unknown): SavingGoal[] {
+  if (!Array.isArray(rawList)) return [];
+  const nowIso = new Date().toISOString();
+  const out: SavingGoal[] = [];
+  for (const item of rawList.slice(0, 50)) {
+    if (!item || typeof item !== "object") continue;
+    const g = item as Partial<SavingGoal>;
+    const name = typeof g.name === "string" ? g.name.trim().slice(0, 60) : "";
+    const targetAmount = Math.round(Number(g.targetAmount) || 0);
+    if (!name || targetAmount <= 0) continue;
+    out.push({
+      id: typeof g.id === "string" && g.id.trim() ? g.id.trim().slice(0, 64) : randomUUID(),
+      name,
+      targetAmount,
+      currentAmount: Math.max(0, Math.round(Number(g.currentAmount) || 0)),
+      deadline:
+        typeof g.deadline === "string" && /^\d{4}-\d{2}-\d{2}$/.test(g.deadline)
+          ? g.deadline
+          : undefined,
+      createdAt: typeof g.createdAt === "string" ? g.createdAt : nowIso,
+    });
+  }
+  return out;
+}
 
 export async function GET(request: Request) {
   const cfg = getSupabaseConfig();
@@ -31,9 +114,12 @@ export async function GET(request: Request) {
     );
   }
   const { searchParams } = new URL(request.url);
-  const provider = searchParams.get("provider") || "google";
+  const requested = searchParams.get("provider") || "google";
+  if (requested !== "google") {
+    return NextResponse.json({ error: "Provider login tidak didukung." }, { status: 400 });
+  }
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/+$/, "");
-  const authUrl = `${cfg.url}/auth/v1/authorize?provider=${encodeURIComponent(provider)}&redirect_to=${encodeURIComponent(appUrl)}`;
+  const authUrl = `${cfg.url}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(appUrl)}`;
   return NextResponse.json({ url: authUrl });
 }
 
@@ -44,6 +130,8 @@ export async function POST(request: Request) {
       email?: string;
       password?: string;
       migrateLocal?: boolean;
+      localTransactions?: unknown[];
+      localGoals?: unknown[];
       accessToken?: string;
       refreshToken?: string;
     };
@@ -53,7 +141,7 @@ export async function POST(request: Request) {
     if (body.action === "logout") {
       cookieStore.delete(CC_ACCESS_COOKIE);
       cookieStore.delete(CC_REFRESH_COOKIE);
-      return NextResponse.json({ state: toPublicState(readDb()) });
+      return NextResponse.json({ state: toPublicState(createInitialDb()) });
     }
 
     if (!isSupabaseConfigured()) {
@@ -78,19 +166,9 @@ export async function POST(request: Request) {
           { status: 401 },
         );
       }
-      cookieStore.set(CC_ACCESS_COOKIE, accessToken, {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        maxAge: 60 * 60 * 24 * 7,
-      });
+      cookieStore.set(CC_ACCESS_COOKIE, accessToken, secureCookieOptions(60 * 60 * 24 * 7));
       if (refreshToken) {
-        cookieStore.set(CC_REFRESH_COOKIE, refreshToken, {
-          httpOnly: true,
-          sameSite: "lax",
-          path: "/",
-          maxAge: 60 * 60 * 24 * 30,
-        });
+        cookieStore.set(CC_REFRESH_COOKIE, refreshToken, secureCookieOptions(60 * 60 * 24 * 30));
       }
       const session = { accessToken, refreshToken, user };
       const { db } = await readSupabaseWorkspace(session, createInitialDb());
@@ -103,11 +181,12 @@ export async function POST(request: Request) {
       if (!cloudDb.auth?.authenticated) {
         return NextResponse.json({ error: "Silakan masuk ke akun Anda terlebih dahulu." }, { status: 401 });
       }
-      const localDb = readDb();
+      const incomingTxs = sanitizeClientTransactions(body.localTransactions, cloudDb.accounts);
+      const incomingGoals = sanitizeClientGoals(body.localGoals);
       const existingTxIds = new Set(cloudDb.transactions.map((t) => t.id));
-      const newTxs = localDb.transactions.filter((t) => !existingTxIds.has(t.id));
+      const newTxs = incomingTxs.filter((t) => !existingTxIds.has(t.id));
       const existingGoalIds = new Set(cloudDb.goals.map((g) => g.id));
-      const newGoals = localDb.goals.filter((g) => !existingGoalIds.has(g.id));
+      const newGoals = incomingGoals.filter((g) => !existingGoalIds.has(g.id));
 
       cloudDb.goals = [...cloudDb.goals, ...newGoals];
       cloudDb.transactions = [...newTxs, ...cloudDb.transactions];
@@ -140,27 +219,20 @@ export async function POST(request: Request) {
         });
       }
 
-      cookieStore.set(CC_ACCESS_COOKIE, result.session.accessToken, {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        maxAge: 60 * 60 * 24 * 7,
-      });
-      cookieStore.set(CC_REFRESH_COOKIE, result.session.refreshToken, {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        maxAge: 60 * 60 * 24 * 30,
-      });
+      cookieStore.set(CC_ACCESS_COOKIE, result.session.accessToken, secureCookieOptions(60 * 60 * 24 * 7));
+      cookieStore.set(CC_REFRESH_COOKIE, result.session.refreshToken, secureCookieOptions(60 * 60 * 24 * 30));
 
-      const seed = body.migrateLocal ? readDb() : createInitialDb();
-      const { workspaceId, db } = await readSupabaseWorkspace(result.session, seed);
-      if (body.migrateLocal && (seed.transactions.length > 0 || seed.goals.length > 0)) {
-        const baseline = structuredClone(db);
-        db.goals = seed.goals;
-        db.transactions = seed.transactions;
-        recomputeGoalAmounts(db);
-        await writeSupabaseWorkspaceDelta(result.session, workspaceId, baseline, db);
+      const { workspaceId, db } = await readSupabaseWorkspace(result.session, createInitialDb());
+      if (body.migrateLocal) {
+        const incomingTxs = sanitizeClientTransactions(body.localTransactions, db.accounts);
+        const incomingGoals = sanitizeClientGoals(body.localGoals);
+        if (incomingTxs.length > 0 || incomingGoals.length > 0) {
+          const baseline = structuredClone(db);
+          db.goals = [...db.goals, ...incomingGoals];
+          db.transactions = [...incomingTxs, ...db.transactions];
+          recomputeGoalAmounts(db);
+          await writeSupabaseWorkspaceDelta(result.session, workspaceId, baseline, db);
+        }
       }
       return NextResponse.json({ state: toPublicState(db) });
     }
@@ -171,24 +243,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: result.error || "Gagal masuk." }, { status: 401 });
     }
 
-    cookieStore.set(CC_ACCESS_COOKIE, result.session.accessToken, {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 7,
-    });
-    cookieStore.set(CC_REFRESH_COOKIE, result.session.refreshToken, {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 30,
-    });
+    cookieStore.set(CC_ACCESS_COOKIE, result.session.accessToken, secureCookieOptions(60 * 60 * 24 * 7));
+    cookieStore.set(CC_REFRESH_COOKIE, result.session.refreshToken, secureCookieOptions(60 * 60 * 24 * 30));
 
     const { workspaceId, db } = await readSupabaseWorkspace(result.session, createInitialDb());
     if (body.migrateLocal) {
-      const localDb = readDb();
+      const incomingTxs = sanitizeClientTransactions(body.localTransactions, db.accounts);
       const existingTxIds = new Set(db.transactions.map((t) => t.id));
-      const newTxs = localDb.transactions.filter((t) => !existingTxIds.has(t.id));
+      const newTxs = incomingTxs.filter((t) => !existingTxIds.has(t.id));
       if (newTxs.length > 0) {
         const baseline = structuredClone(db);
         db.transactions = [...newTxs, ...db.transactions];

@@ -4,11 +4,17 @@ import {
   syncTransactionsToSheet,
   transactionToSheetRow,
 } from "@/lib/google-sheets";
-import { readAsyncDb, toPublicState, writeAsyncDb } from "@/lib/store";
+import { isUnauthenticatedCloudRequest, readAsyncDb, toPublicState, writeAsyncDb } from "@/lib/store";
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as { full?: boolean };
   const db = await readAsyncDb();
+  if (isUnauthenticatedCloudRequest(db)) {
+    return NextResponse.json(
+      { error: "Silakan masuk ke akun Anda terlebih dahulu." },
+      { status: 401 },
+    );
+  }
   if (!db.sheetConnection.connected) {
     const previewRows = [
       ["Transaction ID", "Tanggal", "Jenis", "Kategori", "Akun", "Nominal", "Keterangan", "Diperbarui"],
@@ -81,6 +87,12 @@ export async function POST(request: Request) {
 
 export async function DELETE() {
   const db = await readAsyncDb();
+  if (isUnauthenticatedCloudRequest(db)) {
+    return NextResponse.json(
+      { error: "Silakan masuk ke akun Anda terlebih dahulu." },
+      { status: 401 },
+    );
+  }
   db.sheetConnection = {
     configured: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
     connected: false,
