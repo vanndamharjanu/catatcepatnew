@@ -35,49 +35,49 @@ export function OctopusMascot({
       {/* Subtle seabed shadow */}
       <ellipse cx="60" cy="107" rx="34" ry="5" fill="#450918" opacity="0.16" />
 
-      {/* Back tentacles (symmetric outer depth layer) */}
+      {/* Outer tentacles (clearly flared out so all 6 tentacles read distinctly) */}
       <path
-        d="M35 72 C24 75 16 83 18 91 C19.5 95 25 94 28 89 C31 84 34 80 39 77"
+        d="M33 68 C20 69 12 75 13 83 C14 87.5 20 88 23 84"
         fill="none"
         stroke="#580D20"
-        strokeWidth="9.5"
+        strokeWidth="8.2"
         strokeLinecap="round"
       />
       <path
-        d="M85 72 C96 75 104 83 102 91 C100.5 95 95 94 92 89 C89 84 86 80 81 77"
+        d="M87 68 C100 69 108 75 107 83 C106 87.5 100 88 97 84"
         fill="none"
         stroke="#580D20"
-        strokeWidth="9.5"
+        strokeWidth="8.2"
         strokeLinecap="round"
       />
 
-      {/* Front curled tentacles (symmetric rounded curves) */}
+      {/* Mid & inner front tentacles (spaced cleanly with clear gaps) */}
       <path
-        d="M42 73 C37 84 31 92 24 91 C20.5 90.5 20 86.5 22.5 84.5"
+        d="M42 74 C36 85 30 93 24 97"
         fill="none"
         stroke="#7E1630"
-        strokeWidth="10.5"
+        strokeWidth="8.6"
         strokeLinecap="round"
       />
       <path
-        d="M53 74 C51 84 49 91 46 95"
+        d="M53 75 C51.5 86 49.5 94 46.5 99"
         fill="none"
         stroke="#7E1630"
-        strokeWidth="10"
+        strokeWidth="8.4"
         strokeLinecap="round"
       />
       <path
-        d="M67 74 C69 84 71 91 74 95"
+        d="M67 75 C68.5 86 70.5 94 73.5 99"
         fill="none"
         stroke="#7E1630"
-        strokeWidth="10"
+        strokeWidth="8.4"
         strokeLinecap="round"
       />
       <path
-        d="M78 73 C83 84 89 92 96 91 C99.5 90.5 100 86.5 97.5 84.5"
+        d="M78 74 C84 85 90 93 96 97"
         fill="none"
         stroke="#7E1630"
-        strokeWidth="10.5"
+        strokeWidth="8.6"
         strokeLinecap="round"
       />
 
