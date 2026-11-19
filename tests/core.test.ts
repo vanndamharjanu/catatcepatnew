@@ -470,7 +470,28 @@ function runTests() {
   assert.equal(deleteAccountInDb(accDb, "acc-bank").ok, true);
   assert.equal(deleteAccountInDb(accDb, "acc-cash").ok, false);
 
-  console.log("ALL CORE TESTS PASSED (21/21)");
+  // 22. Indonesian decimal comma ("5,2 juta", "15,5rb") must NOT split into separate transactions
+  const decimalSalary = parseIndonesianTransactionsLocal(
+    "Gajian 5,2 juta masuk rekening bank",
+    sampleAccounts,
+    "2026-11-19",
+  );
+  assert.equal(decimalSalary.length, 1);
+  assert.equal(decimalSalary[0].type, "Masuk");
+  assert.equal(decimalSalary[0].category, "Gaji");
+  assert.equal(decimalSalary[0].amount, 5_200_000);
+  assert.equal(decimalSalary[0].accountId, "acc-bank");
+
+  const multiDecimal = parseIndonesianTransactionsLocal(
+    "Bensin 2,5rb cash, kopi 15,5rb gopay",
+    sampleAccounts,
+    "2026-11-19",
+  );
+  assert.equal(multiDecimal.length, 2);
+  assert.equal(multiDecimal[0].amount, 2_500);
+  assert.equal(multiDecimal[1].amount, 15_500);
+
+  console.log("ALL CORE TESTS PASSED (22/22)");
 }
 
 runTests();

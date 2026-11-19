@@ -95,8 +95,9 @@ export function parseIndonesianTransactionsLocal(
   accounts: Account[],
   defaultDate: string = toIsoDate(),
 ): ParsedTransactionDraft[] {
+  // Split on newlines, semicolons, or commas NOT flanked by digits (preserves Indonesian decimals like "5,2 juta").
   const segments = text
-    .split(/[\n,;]+/)
+    .split(/(?:[\n;]+|(?<!\d),|,(?!\d))+/)
     .map((s) => s.trim())
     .filter(Boolean);
 

@@ -5,7 +5,12 @@ import Link from "next/link";
 import { readBrowserDemoExport } from "@/lib/client-demo";
 import { formatDisplayDate, formatRupiah, toIsoDate } from "@/lib/finance";
 import { parseIndonesianTransactionsLocal } from "@/lib/local-parser";
-import { APP_SLOGAN, type Account, type AppDatabase, type ThemeKey } from "@/lib/types";
+import {
+  APP_SLOGAN,
+  type Account,
+  type AppDatabase,
+  type ThemeKey,
+} from "@/lib/types";
 import {
   CameraIcon,
   ChartIcon,
@@ -79,7 +84,9 @@ export function LandingPage({
   const [errorMsg, setErrorMsg] = useState<string | null>(initialError || null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
   const [sampleIdx, setSampleIdx] = useState(0);
-  const [livePreviewText, setLivePreviewText] = useState(CHAT_EXAMPLES[0].prompt);
+  const [livePreviewText, setLivePreviewText] = useState(
+    CHAT_EXAMPLES[0].prompt,
+  );
 
   const activeSample = SAMPLE_BUDGETS[sampleIdx] ?? SAMPLE_BUDGETS[0];
   const sampleRemaining = Math.max(0, activeSample.budget - activeSample.spent);
@@ -141,7 +148,9 @@ export function LandingPage({
     setErrorMsg(null);
     setInfoMsg(null);
     try {
-      const localExport = migrateLocal ? readBrowserDemoExport() : { transactions: [], goals: [] };
+      const localExport = migrateLocal
+        ? readBrowserDemoExport()
+        : { transactions: [], goals: [] };
       const res = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -256,9 +265,9 @@ export function LandingPage({
                   Tahu sisa jatah belanja hari ini sebelum gaji habis.
                 </h1>
                 <p className="mt-3 max-w-xl text-sm leading-relaxed text-[var(--text-muted)] sm:text-base">
-                  Tanpa ribet zoom-in spreadsheet di HP. Catat 3 detik lewat form
-                  1-layar, suara, atau foto struk; otomatis rapi di Google Sheets
-                  pribadi Anda.
+                  Tanpa ribet zoom-in spreadsheet di HP. Catat 3 detik lewat
+                  form 1-layar, suara, atau foto struk; otomatis rapi di Google
+                  Sheets pribadi Anda.
                 </p>
               </div>
 
@@ -330,7 +339,8 @@ export function LandingPage({
                       htmlFor="landing-live-try"
                       className="block text-[11px] font-bold text-[var(--text-muted)]"
                     >
-                      Coba ketik sendiri (pisahkan dengan koma untuk multi-transaksi):
+                      Coba ketik sendiri (pisahkan dengan koma untuk
+                      multi-transaksi):
                     </label>
                     <input
                       id="landing-live-try"
@@ -376,7 +386,8 @@ export function LandingPage({
                       })
                     ) : (
                       <p className="rounded-xl bg-[var(--bg-card)] px-3 py-2.5 text-xs text-[var(--text-muted)]">
-                        Tulis nominal seperti &ldquo;25rb&rdquo; atau &ldquo;15000&rdquo; untuk melihat hasil draf otomatis.
+                        Tulis nominal seperti &ldquo;25rb&rdquo; atau
+                        &ldquo;15000&rdquo; untuk melihat hasil draf otomatis.
                       </p>
                     )}
                   </div>
@@ -390,22 +401,14 @@ export function LandingPage({
             id="fitur"
             className="mt-8 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5 sm:p-6"
           >
-            <div className="flex flex-wrap items-end justify-between gap-2 border-b border-[var(--border-subtle)] pb-4">
-              <div>
-                <h2 className="text-base font-extrabold text-[var(--text-primary)] sm:text-lg">
-                  Lengkap di Dalam, Tetap Ringkas di Layar HP
-                </h2>
-                <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-                  Semua alat pencatatan harian tersedia dan bisa langsung dicoba di Mode Demo.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={onEnterDemo}
-                className="min-h-[38px] rounded-xl bg-[var(--bg-soft)] px-3.5 text-xs font-extrabold text-[var(--brand-primary)] hover:bg-[var(--bg-soft-hover)] dark:text-[#fda4af]"
-              >
-                Buka Mode Demo
-              </button>
+            <div className="border-b border-[var(--border-subtle)] pb-4">
+              <h2 className="text-base font-extrabold text-[var(--text-primary)] sm:text-lg">
+                Lengkap di Dalam, Tetap Ringkas di Layar HP
+              </h2>
+              <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                Semua alat pencatatan harian tersedia dan bisa langsung dicoba
+                di Mode Demo.
+              </p>
             </div>
 
             <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -418,7 +421,8 @@ export function LandingPage({
                     Input 1-Layar &amp; 6 Tema Warna
                   </h3>
                   <p className="mt-0.5 text-xs leading-relaxed text-[var(--text-muted)]">
-                    Tombol nominal cepat (+500 s.d. +500rb), kategori berikon yang bisa diatur sendiri, serta ganti warna tema seketika.
+                    Tombol nominal cepat (+500 s.d. +500rb), kategori berikon
+                    yang bisa diatur sendiri, serta ganti warna tema seketika.
                   </p>
                 </div>
               </div>
@@ -432,7 +436,8 @@ export function LandingPage({
                     Scan Foto Struk, Suara &amp; Offline (PWA)
                   </h3>
                   <p className="mt-0.5 text-xs leading-relaxed text-[var(--text-muted)]">
-                    Pasang di layar utama HP tanpa instal aplikasi berat. Catatan saat sinyal hilang masuk antrean offline otomatis.
+                    Pasang di layar utama HP tanpa instal aplikasi berat.
+                    Catatan saat sinyal hilang masuk antrean offline otomatis.
                   </p>
                 </div>
               </div>
@@ -446,7 +451,8 @@ export function LandingPage({
                     Multi-Dompet, Koreksi Saldo &amp; Rutin
                   </h3>
                   <p className="mt-0.5 text-xs leading-relaxed text-[var(--text-muted)]">
-                    Tambah dompet kustom (BCA, GoPay, Kas), cocokkan saldo nyata 1 klik, dan catat tagihan/gaji rutin tiap bulan.
+                    Tambah dompet kustom (BCA, GoPay, Kas), cocokkan saldo nyata
+                    1 klik, dan catat tagihan/gaji rutin tiap bulan.
                   </p>
                 </div>
               </div>
@@ -460,7 +466,8 @@ export function LandingPage({
                     Target Tabungan, Grafik &amp; Tanya Guri
                   </h3>
                   <p className="mt-0.5 text-xs leading-relaxed text-[var(--text-muted)]">
-                    Pantau batas anggaran per kategori, grafik tren tahunan, target tabungan, dan tanya kondisi keuanganmu ke Guri.
+                    Pantau batas anggaran per kategori, grafik tren tahunan,
+                    target tabungan, dan tanya kondisi keuanganmu ke Guri.
                   </p>
                 </div>
               </div>
@@ -481,7 +488,7 @@ export function LandingPage({
                     </div>
                     <div className="min-w-0">
                       <h2 className="text-base font-extrabold text-[var(--text-primary)]">
-                        Simulasi Jatah Harian Guri
+                        Simulasi Jatah Harian
                       </h2>
                       <p className="text-xs text-[var(--text-muted)]">
                         Target anggaran bulanan:
@@ -550,24 +557,14 @@ export function LandingPage({
               className="flex h-full flex-col justify-between rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-5 sm:p-6"
             >
               <div>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0">
-                    <h2 className="text-base font-extrabold text-[var(--text-primary)]">
-                      Tersimpan di Google Sheets Pribadi
-                    </h2>
-                    <p className="mt-1 text-xs text-[var(--text-muted)]">
-                      Hanya mengakses 1 file buatan aplikasi, tanpa membaca file
-                      Drive Anda yang lain.
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => openAuthModal("login")}
-                    className="min-h-[40px] w-full shrink-0 rounded-xl bg-[var(--bg-soft)] px-3.5 text-xs font-extrabold text-[var(--brand-primary)] hover:bg-[var(--bg-soft-hover)] dark:text-[#fda4af] sm:w-auto"
-                  >
-                    Mulai Sekarang
-                  </button>
+                <div className="min-w-0">
+                  <h2 className="text-base font-extrabold text-[var(--text-primary)]">
+                    Tersimpan di Google Sheets Pribadi
+                  </h2>
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">
+                    Hanya mengakses 1 file buatan aplikasi, tanpa membaca file
+                    Drive Anda yang lain.
+                  </p>
                 </div>
 
                 <div className="mt-4 w-full max-w-full overflow-x-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-2.5">
@@ -629,7 +626,8 @@ export function LandingPage({
 
               <p className="mt-3 text-xs text-[var(--text-muted)]">
                 Otomatis membuat tab <strong>Transaksi</strong> dan tab{" "}
-                <strong>Ringkasan</strong> berisi rumus rekap di Google Drive Anda.
+                <strong>Ringkasan</strong> berisi rumus rekap di Google Drive
+                Anda.
               </p>
             </div>
           </section>
@@ -641,31 +639,23 @@ export function LandingPage({
                 Mulai catat keuangan rapi hari ini.
               </h2>
               <p className="mt-0.5 text-xs text-white/85">
-                Gratis untuk pencatatan harian di HP maupun laptop, data tetap milik Anda.
+                Gratis untuk pencatatan harian di HP maupun laptop, data tetap
+                milik Anda.
               </p>
             </div>
-            <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-              <button
-                type="button"
-                onClick={() => openAuthModal("register")}
-                className="min-h-[42px] flex-1 rounded-xl bg-white px-4 text-xs font-extrabold text-[var(--brand-primary)] hover:bg-white/90 sm:flex-none"
-              >
-                Daftar Gratis
-              </button>
-              <button
-                type="button"
-                onClick={onEnterDemo}
-                className="min-h-[42px] flex-1 rounded-xl border border-white/35 bg-white/10 px-4 text-xs font-bold text-white hover:bg-white/20 sm:flex-none"
-              >
-                Coba Demo
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => openAuthModal("register")}
+              className="min-h-[42px] w-full shrink-0 rounded-xl bg-white px-5 text-xs font-extrabold text-[var(--brand-primary)] hover:bg-white/90 sm:w-auto"
+            >
+              Daftar Gratis
+            </button>
           </section>
         </div>
       </main>
 
       <footer className="border-t border-[var(--border-subtle)] bg-[var(--bg-card)] px-4 py-6 sm:px-8">
-        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-4 text-xs text-[var(--text-muted)]">
+        <div className="mx-auto flex w-full max-w-6xl flex-col items-center gap-3 text-center text-xs text-[var(--text-muted)] sm:flex-row sm:justify-between sm:text-left">
           <div>
             <span className="font-extrabold text-[var(--text-primary)]">
               CatatCepat
@@ -674,7 +664,7 @@ export function LandingPage({
             <span>{APP_SLOGAN}</span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-4 font-bold">
+          <div className="flex flex-wrap items-center justify-center gap-4 font-bold">
             <Link
               href="/privacy"
               className="py-1 text-[var(--text-primary)] hover:underline"

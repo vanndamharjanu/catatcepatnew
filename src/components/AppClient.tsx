@@ -2423,65 +2423,131 @@ export function AppClient({ initialDb }: AppClientProps) {
                   </p>
                 </div>
 
-                <form onSubmit={handleAddRecurring} className="grid grid-cols-1 gap-2 sm:grid-cols-6">
-                  <input
-                    type="text"
-                    value={recName}
-                    onChange={(e) => setRecName(e.target.value)}
-                    placeholder="Nama (mis. WiFi / Gaji)"
-                    className="min-h-[40px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-xs font-bold text-[var(--text-primary)] sm:col-span-2"
-                  />
-                  <select
-                    value={recType}
-                    onChange={(e) => {
-                      const nextT = e.target.value === "Masuk" ? "Masuk" : "Keluar";
-                      setRecType(nextT);
-                      const first = db.categories.find((c) => c.type === nextT);
-                      if (first) setRecCategory(first.name);
-                    }}
-                    aria-label="Jenis rutin"
-                    className="min-h-[40px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 text-xs font-bold text-[var(--text-primary)]"
-                  >
-                    <option value="Keluar">Keluar</option>
-                    <option value="Masuk">Masuk</option>
-                  </select>
-                  <select
-                    value={recCategory}
-                    onChange={(e) => setRecCategory(e.target.value)}
-                    aria-label="Kategori rutin"
-                    className="min-h-[40px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 text-xs font-bold text-[var(--text-primary)]"
-                  >
-                    {db.categories
-                      .filter((c) => c.type === recType)
-                      .map((c) => (
-                        <option key={c.id} value={c.name}>
-                          {c.name}
+                <form onSubmit={handleAddRecurring} className="grid grid-cols-1 gap-2.5 sm:grid-cols-3 sm:items-end">
+                  <div>
+                    <label
+                      htmlFor="rec-name"
+                      className="mb-1 block text-[11px] font-bold text-[var(--text-muted)]"
+                    >
+                      Nama Jadwal
+                    </label>
+                    <input
+                      id="rec-name"
+                      type="text"
+                      value={recName}
+                      onChange={(e) => setRecName(e.target.value)}
+                      placeholder="Mis. WiFi / Gaji"
+                      className="min-h-[40px] w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-xs font-bold text-[var(--text-primary)]"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="rec-type"
+                      className="mb-1 block text-[11px] font-bold text-[var(--text-muted)]"
+                    >
+                      Jenis
+                    </label>
+                    <select
+                      id="rec-type"
+                      value={recType}
+                      onChange={(e) => {
+                        const nextT = e.target.value === "Masuk" ? "Masuk" : "Keluar";
+                        setRecType(nextT);
+                        const first = db.categories.find((c) => c.type === nextT);
+                        if (first) setRecCategory(first.name);
+                      }}
+                      className="min-h-[40px] w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-xs font-bold text-[var(--text-primary)]"
+                    >
+                      <option value="Keluar">Keluar</option>
+                      <option value="Masuk">Masuk</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="rec-category"
+                      className="mb-1 block text-[11px] font-bold text-[var(--text-muted)]"
+                    >
+                      Kategori
+                    </label>
+                    <select
+                      id="rec-category"
+                      value={recCategory}
+                      onChange={(e) => setRecCategory(e.target.value)}
+                      className="min-h-[40px] w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-xs font-bold text-[var(--text-primary)]"
+                    >
+                      {db.categories
+                        .filter((c) => c.type === recType)
+                        .map((c) => (
+                          <option key={c.id} value={c.name}>
+                            {c.name}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="rec-account"
+                      className="mb-1 block text-[11px] font-bold text-[var(--text-muted)]"
+                    >
+                      Dompet
+                    </label>
+                    <select
+                      id="rec-account"
+                      value={recAccountId}
+                      onChange={(e) => setRecAccountId(e.target.value)}
+                      className="min-h-[40px] w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-xs font-bold text-[var(--text-primary)]"
+                    >
+                      {db.accounts.map((acc) => (
+                        <option key={acc.id} value={acc.id}>
+                          {acc.name}
                         </option>
                       ))}
-                  </select>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={
-                      recAmountRaw
-                        ? (parseInt(recAmountRaw.replace(/\D/g, ""), 10) || 0).toLocaleString("id-ID")
-                        : ""
-                    }
-                    onChange={(e) => setRecAmountRaw(e.target.value.replace(/\D/g, ""))}
-                    placeholder="Nominal Rp"
-                    className="min-h-[40px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-xs font-bold text-[var(--text-primary)] tabular-nums"
-                  />
-                  <div className="flex gap-1.5">
+                    </select>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="rec-amount"
+                      className="mb-1 block text-[11px] font-bold text-[var(--text-muted)]"
+                    >
+                      Nominal (Rp)
+                    </label>
                     <input
-                      type="number"
-                      min={1}
-                      max={28}
-                      value={recDay}
-                      onChange={(e) => setRecDay(e.target.value)}
-                      aria-label="Tanggal tiap bulan"
-                      title="Tanggal tiap bulan (1-28)"
-                      className="min-h-[40px] w-14 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2 text-center text-xs font-bold text-[var(--text-primary)] tabular-nums"
+                      id="rec-amount"
+                      type="text"
+                      inputMode="numeric"
+                      value={
+                        recAmountRaw
+                          ? (parseInt(recAmountRaw.replace(/\D/g, ""), 10) || 0).toLocaleString("id-ID")
+                          : ""
+                      }
+                      onChange={(e) => setRecAmountRaw(e.target.value.replace(/\D/g, ""))}
+                      placeholder="0"
+                      className="min-h-[40px] w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-xs font-bold text-[var(--text-primary)] tabular-nums"
                     />
+                  </div>
+
+                  <div className="flex items-end gap-2">
+                    <div className="w-24 shrink-0">
+                      <label
+                        htmlFor="rec-day"
+                        className="mb-1 block text-[11px] font-bold text-[var(--text-muted)]"
+                      >
+                        Tgl (1-28)
+                      </label>
+                      <input
+                        id="rec-day"
+                        type="number"
+                        min={1}
+                        max={28}
+                        value={recDay}
+                        onChange={(e) => setRecDay(e.target.value)}
+                        className="min-h-[40px] w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2 text-center text-xs font-bold text-[var(--text-primary)] tabular-nums"
+                      />
+                    </div>
                     <button
                       type="submit"
                       className="min-h-[40px] flex-1 rounded-xl bg-[var(--brand-primary)] px-3 text-xs font-extrabold text-white hover:bg-[var(--brand-hover)]"
