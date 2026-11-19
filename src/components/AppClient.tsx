@@ -420,6 +420,27 @@ export function AppClient({ initialDb }: AppClientProps) {
     setExtras(loadWorkspaceExtras(extrasScopeKey));
   }, [extrasScopeKey]);
 
+  // Sync mobile PWA status bar & gesture bar color with active theme/dark mode
+  useEffect(() => {
+    const surfaceColor =
+      getComputedStyle(document.documentElement)
+        .getPropertyValue("--bg-card")
+        .trim() || (darkMode ? "#221117" : "#ffffff");
+    const metas = document.querySelectorAll<HTMLMetaElement>(
+      'meta[name="theme-color"]',
+    );
+    if (metas.length > 0) {
+      metas.forEach((m) => {
+        m.content = surfaceColor;
+      });
+    } else {
+      const meta = document.createElement("meta");
+      meta.name = "theme-color";
+      meta.content = surfaceColor;
+      document.head.appendChild(meta);
+    }
+  }, [darkMode, themeColor]);
+
   const toggleDarkMode = () => {
     setDarkMode((prev) => {
       const next = !prev;
@@ -1994,7 +2015,7 @@ export function AppClient({ initialDb }: AppClientProps) {
           </div>
         </div>
 
-        <main className="px-4 py-2 md:px-8">
+        <main className="px-4 pt-2 pb-28 md:px-8 md:pb-8">
           <div className="mx-auto max-w-4xl space-y-5">
             {/* ================================================= */}
             {/* TAB 1: CATAT / BERANDA                            */}
