@@ -29,6 +29,7 @@ import {
   createPkcePair,
   sanitizeSpreadsheetCell,
 } from "../src/lib/security.ts";
+import { findDueRecurringItems } from "../src/lib/web-push.ts";
 import { computeDbDiff } from "../src/lib/supabase.ts";
 import {
   addAccountInDb,
@@ -513,7 +514,44 @@ function runTests() {
     .digest("base64url");
   assert.equal(pkce.challenge, expectedChallenge);
 
-  console.log("ALL CORE TESTS PASSED (24/24)");
+  // 25. findDueRecurringItems returns only due & unrecorded items for the current month
+  const dueList = findDueRecurringItems(
+    [
+      {
+        id: "r1",
+        name: "WiFi",
+        type: "Keluar",
+        category: "Tagihan",
+        accountId: "acc-bank",
+        amount: 350_000,
+        dayOfMonth: 10,
+      },
+      {
+        id: "r2",
+        name: "Listrik",
+        type: "Keluar",
+        category: "Tagihan",
+        accountId: "acc-bank",
+        amount: 200_000,
+        dayOfMonth: 15,
+        lastRecordedMonth: "2026-11",
+      },
+      {
+        id: "r3",
+        name: "Gaji",
+        type: "Masuk",
+        category: "Gaji",
+        accountId: "acc-bank",
+        amount: 5_000_000,
+        dayOfMonth: 25,
+      },
+    ],
+    now, // 2026-11-17
+  );
+  assert.equal(dueList.length, 1);
+  assert.equal(dueList[0].id, "r1");
+
+  console.log("ALL CORE TESTS PASSED (25/25)");
 }
 
 runTests();

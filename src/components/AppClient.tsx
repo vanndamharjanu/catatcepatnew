@@ -420,6 +420,32 @@ export function AppClient({ initialDb }: AppClientProps) {
     setExtras(loadWorkspaceExtras(extrasScopeKey));
   }, [extrasScopeKey]);
 
+  // Keep server-side push_subscriptions.recurring_json in sync when subscribed
+  useEffect(() => {
+    if (isDemoMode) return;
+    if (
+      typeof window === "undefined" ||
+      !("serviceWorker" in navigator) ||
+      !("PushManager" in window)
+    ) {
+      return;
+    }
+    navigator.serviceWorker.ready
+      .then((reg) => reg.pushManager.getSubscription())
+      .then((sub) => {
+        if (!sub) return;
+        return fetch("/api/push/subscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subscription: sub.toJSON(),
+            recurring: extras.recurring,
+          }),
+        });
+      })
+      .catch(() => {});
+  }, [extras.recurring, isDemoMode]);
+
   // Sync mobile PWA status bar & gesture bar color with active theme/dark mode
   useEffect(() => {
     const surfaceColor =
@@ -2521,6 +2547,7 @@ export function AppClient({ initialDb }: AppClientProps) {
         onClearAll={handleClearAll}
         onTriggerSync={triggerBackgroundSync}
         onNotify={showToast}
+        recurring={extras.recurring}
       />
 
       {/* Rumus Jatah Harian Modal */}

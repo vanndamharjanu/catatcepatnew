@@ -5,6 +5,7 @@ import { readBrowserDemoExport } from "@/lib/client-demo";
 import type {
   AccountKind,
   AppDatabase,
+  RecurringTemplate,
   ThemeKey,
   WorkspaceSettings,
 } from "@/lib/types";
@@ -37,6 +38,18 @@ interface SheetsDrawerProps {
   onClearAll: () => Promise<void>;
   onTriggerSync?: (full?: boolean) => Promise<void> | void;
   onNotify: (msg: string) => void;
+  recurring?: RecurringTemplate[];
+}
+
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  const output = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i += 1) {
+    output[i] = raw.charCodeAt(i);
+  }
+  return output;
 }
 
 export function SheetsDrawer({
@@ -54,6 +67,7 @@ export function SheetsDrawer({
   onClearAll,
   onTriggerSync,
   onNotify,
+  recurring = [],
 }: SheetsDrawerProps) {
   const [activeTab, setActiveTab] = useState<SettingsTabKey>(initialTab);
   const [budgetText, setBudgetText] = useState(
@@ -71,6 +85,91 @@ export function SheetsDrawer({
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+
+  useEffect(() => {
+    if (!open || isDemoMode) return;
+    if (
+      typeof window === "undefined" ||
+      !("serviceWorker" in navigator) ||
+      !("PushManager" in window)
+    ) {
+      return;
+    }
+    navigator.serviceWorker.ready
+      .then((reg) => reg.pushManager.getSubscription())
+      .then((sub) => setPushSubscribed(Boolean(sub)))
+      .catch(() => {});
+  }, [open, isDemoMode]);
+
+  const handleTogglePush = async () => {
+    if (isDemoMode) {
+      onNotify("Masuk dengan akun Google/Email untuk mengaktifkan notifikasi PWA.");
+      return;
+    }
+    if (
+      typeof window === "undefined" ||
+      !("serviceWorker" in navigator) ||
+      !("PushManager" in window)
+    ) {
+      onNotify("Browser atau perangkat ini belum mendukung Web Push PWA.");
+      return;
+    }
+    const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY?.trim() || "";
+    if (!vapidKey) {
+      onNotify("VAPID public key belum dikonfigurasi di server.");
+      return;
+    }
+
+    setPushBusy(true);
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const existing = await reg.pushManager.getSubscription();
+      if (existing) {
+        await fetch("/api/push/subscribe", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endpoint: existing.endpoint }),
+        });
+        await existing.unsubscribe();
+        setPushSubscribed(false);
+        onNotify("Notifikasi pengingat PWA dinonaktifkan.");
+      } else {
+        const perm = await Notification.requestPermission();
+        if (perm !== "granted") {
+          throw new Error(
+            "Izin notifikasi ditolak. Aktifkan izin notifikasi di pengaturan browser.",
+          );
+        }
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource,
+        });
+        const res = await fetch("/api/push/subscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subscription: sub.toJSON(),
+            recurring,
+            sendTest: true,
+          }),
+        });
+        const data = (await res.json()) as { error?: string };
+        if (!res.ok) {
+          throw new Error(data.error || "Gagal mengaktifkan notifikasi.");
+        }
+        setPushSubscribed(true);
+        onNotify("Notifikasi pengingat PWA aktif! Cek notifikasi tes di HP.");
+      }
+    } catch (err) {
+      onNotify(
+        err instanceof Error ? err.message : "Gagal mengatur notifikasi PWA.",
+      );
+    } finally {
+      setPushBusy(false);
+    }
+  };
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
@@ -693,6 +792,35 @@ export function SheetsDrawer({
                 />
               </div>
 
+              {!isDemoMode && (
+                <div className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-3.5">
+                  <div className="min-w-0">
+                    <span className="block text-xs font-bold text-[var(--text-primary)]">
+                      Pengingat Jadwal Rutin (PWA Push)
+                    </span>
+                    <span className="mt-0.5 block text-[11px] text-[var(--text-muted)]">
+                      Kirim pengingat tiap pagi saat ada tagihan/gaji jatuh tempo.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={pushBusy}
+                    onClick={() => void handleTogglePush()}
+                    className={`min-h-[38px] shrink-0 rounded-xl px-3.5 text-xs font-extrabold transition ${
+                      pushSubscribed
+                        ? "border border-[var(--border-subtle)] bg-[var(--bg-card)] text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
+                        : "bg-[var(--brand-primary)] text-white hover:bg-[var(--brand-hover)]"
+                    } disabled:opacity-50`}
+                  >
+                    {pushBusy
+                      ? "Memproses..."
+                      : pushSubscribed
+                        ? "Nonaktifkan"
+                        : "Aktifkan"}
+                  </button>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-2.5">
                 <div>
                   <label
@@ -719,7 +847,7 @@ export function SheetsDrawer({
                     htmlFor="setting-payday"
                     className="mb-1 block text-xs font-bold text-[var(--text-muted)]"
                   >
-                    Tgl Gajian (1-31)
+                    Tanggal Gajian (1-31)
                   </label>
                   <input
                     id="setting-payday"

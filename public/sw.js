@@ -55,3 +55,50 @@ self.addEventListener("fetch", (event) => {
     );
   }
 });
+
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+  let payload = {
+    title: "CatatCepat",
+    body: "Ada pengingat catatan keuangan hari ini.",
+    url: "/",
+    tag: "catatcepat-reminder",
+  };
+  try {
+    const parsed = event.data.json();
+    payload = { ...payload, ...parsed };
+  } catch {
+    payload.body = event.data.text() || payload.body;
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(payload.title, {
+      body: payload.body,
+      icon: "/icon.svg",
+      badge: "/icon.svg",
+      tag: payload.tag,
+      data: { url: payload.url || "/" },
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = event.notification.data?.url || "/";
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const client of list) {
+        if ("focus" in client) {
+          client.focus();
+          if ("navigate" in client) {
+            return client.navigate(targetUrl);
+          }
+          return client;
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
+    }),
+  );
+});
