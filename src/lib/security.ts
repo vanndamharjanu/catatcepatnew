@@ -1,7 +1,17 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 const RATE_BUCKET = new Map<string, { count: number; resetAt: number }>();
 const MAX_BUCKETS = 2000;
+
+export const SHEETS_OAUTH_STATE_COOKIE = "cc_sheets_oauth_state";
+export const SB_PKCE_VERIFIER_COOKIE = "cc_sb_pkce_verifier";
+
+/** Generate OAuth 2.0 PKCE S256 code_verifier and code_challenge pair. */
+export function createPkcePair(): { verifier: string; challenge: string } {
+  const verifier = randomBytes(32).toString("base64url");
+  const challenge = createHash("sha256").update(verifier).digest("base64url");
+  return { verifier, challenge };
+}
 
 /** Escape leading formula characters to prevent spreadsheet/CSV formula injection. */
 export function sanitizeSpreadsheetCell(value: string): string {
@@ -63,8 +73,6 @@ export function constantTimeEqual(a: string, b: string): boolean {
   if (bufA.length !== bufB.length) return false;
   return timingSafeEqual(bufA, bufB);
 }
-
-export const SHEETS_OAUTH_STATE_COOKIE = "cc_sheets_oauth_state";
 
 /** Standard secure cookie options for auth and OAuth state cookies. */
 export function secureCookieOptions(maxAge: number) {

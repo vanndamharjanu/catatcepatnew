@@ -1,8 +1,34 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { computeAccountBalances, formatRupiah, toIsoDate } from "@/lib/finance";
-import { isUnauthenticatedCloudRequest, readAsyncDb, toPublicState, writeAsyncDb } from "@/lib/store";
+import {
+  deleteTransactionDirect,
+  insertTransactionsDirect,
+  isUnauthenticatedCloudRequest,
+  readAsyncDb,
+  readTransactionsPageAsync,
+  toPublicState,
+  updateTransactionDirect,
+  writeAsyncDb,
+} from "@/lib/store";
 import type { Account, Transaction, TransactionSource, TransactionType } from "@/lib/types";
+
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const offset = parseInt(searchParams.get("offset") || "0", 10) || 0;
+  const limit = parseInt(searchParams.get("limit") || "500", 10) || 500;
+  const page = await readTransactionsPageAsync(offset, limit);
+  if (page.unauthenticated) {
+    return NextResponse.json(
+      { error: "Silakan masuk ke akun Anda terlebih dahulu." },
+      { status: 401 },
+    );
+  }
+  return NextResponse.json({
+    transactions: page.transactions,
+    hasMore: page.hasMore,
+  });
+}
 
 interface TransactionInput {
   date?: string;
@@ -134,8 +160,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Tidak ada transaksi untuk disimpan." }, { status: 400 });
     }
 
-    db.transactions = [...created, ...db.transactions];
-    await writeAsyncDb(db);
+    await insertTransactionsDirect(db, created);
 
     return NextResponse.json(toPublicState(db), { status: 201 });
   } catch (err) {
@@ -160,25 +185,21 @@ export async function PATCH(request: Request) {
         { status: 401 },
       );
     }
-    const idx = db.transactions.findIndex((t) => t.id === body.id);
-    if (idx === -1) {
-      return NextResponse.json({ error: "Transaksi tidak ditemukan." }, { status: 404 });
-    }
 
     const valid = validateTxInput(body, db.accounts);
     if ("error" in valid) {
       return NextResponse.json({ error: valid.error }, { status: 400 });
     }
 
-    db.transactions[idx] = {
-      ...db.transactions[idx],
+    const updated = await updateTransactionDirect(db, body.id, {
       ...valid,
-      source: db.transactions[idx].source,
       sheetSyncStatus: db.sheetConnection.connected ? "pending" : "local_only",
       updatedAt: new Date().toISOString(),
-    };
+    });
+    if (!updated) {
+      return NextResponse.json({ error: "Transaksi tidak ditemukan." }, { status: 404 });
+    }
 
-    await writeAsyncDb(db);
     return NextResponse.json(toPublicState(db));
   } catch (err) {
     return NextResponse.json(
@@ -203,19 +224,12 @@ export async function DELETE(request: Request) {
         { status: 401 },
       );
     }
-    const before = db.transactions.length;
-    db.transactions = db.transactions.filter((t) => t.id !== id);
-    if (db.transactions.length === before) {
+
+    const deleted = await deleteTransactionDirect(db, id);
+    if (!deleted) {
       return NextResponse.json({ error: "Transaksi tidak ditemukan." }, { status: 404 });
     }
 
-    if (db.sheetConnection.connected) {
-      db.sheetConnection.pendingDeletes = Array.from(
-        new Set([...(db.sheetConnection.pendingDeletes ?? []), id]),
-      );
-    }
-
-    await writeAsyncDb(db);
     return NextResponse.json(toPublicState(db));
   } catch (err) {
     return NextResponse.json(

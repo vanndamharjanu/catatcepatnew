@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { toIsoDate } from "@/lib/finance";
-import { secureCookieOptions } from "@/lib/security";
+import {
+  createPkcePair,
+  SB_PKCE_VERIFIER_COOKIE,
+  secureCookieOptions,
+} from "@/lib/security";
 import {
   createInitialDb,
   readAsyncDb,
@@ -13,6 +17,7 @@ import {
 import {
   CC_ACCESS_COOKIE,
   CC_REFRESH_COOKIE,
+  exchangeSupabasePkceCode,
   getSupabaseConfig,
   getSupabaseUser,
   isSupabaseConfigured,
@@ -118,15 +123,25 @@ export async function GET(request: Request) {
   if (requested !== "google") {
     return NextResponse.json({ error: "Provider login tidak didukung." }, { status: 400 });
   }
+  const { verifier, challenge } = createPkcePair();
+  const cookieStore = await cookies();
+  cookieStore.set(SB_PKCE_VERIFIER_COOKIE, verifier, secureCookieOptions(60 * 10));
+
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/+$/, "");
-  const authUrl = `${cfg.url}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(appUrl)}`;
+  const authUrl = `${cfg.url}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(appUrl)}&code_challenge=${encodeURIComponent(challenge)}&code_challenge_method=s256`;
   return NextResponse.json({ url: authUrl });
 }
 
 export async function POST(request: Request) {
   try {
     const body = (await request.json().catch(() => ({}))) as {
-      action?: "login" | "register" | "logout" | "migrate_local" | "session_from_tokens";
+      action?:
+        | "login"
+        | "register"
+        | "logout"
+        | "migrate_local"
+        | "session_from_tokens"
+        | "exchange_pkce_code";
       email?: string;
       password?: string;
       migrateLocal?: boolean;
@@ -134,6 +149,7 @@ export async function POST(request: Request) {
       localGoals?: unknown[];
       accessToken?: string;
       refreshToken?: string;
+      code?: string;
     };
 
     const cookieStore = await cookies();
@@ -141,6 +157,7 @@ export async function POST(request: Request) {
     if (body.action === "logout") {
       cookieStore.delete(CC_ACCESS_COOKIE);
       cookieStore.delete(CC_REFRESH_COOKIE);
+      cookieStore.delete(SB_PKCE_VERIFIER_COOKIE);
       return NextResponse.json({ state: toPublicState(createInitialDb()) });
     }
 
@@ -151,6 +168,40 @@ export async function POST(request: Request) {
         },
         { status: 400 },
       );
+    }
+
+    if (body.action === "exchange_pkce_code") {
+      const code = (body.code || "").trim();
+      const verifier = cookieStore.get(SB_PKCE_VERIFIER_COOKIE)?.value || "";
+      cookieStore.delete(SB_PKCE_VERIFIER_COOKIE);
+      if (!code || !verifier) {
+        return NextResponse.json(
+          { error: "Kode atau sesi verifikasi PKCE login Google tidak ditemukan. Silakan masuk ulang." },
+          { status: 400 },
+        );
+      }
+      const exchanged = await exchangeSupabasePkceCode(code, verifier);
+      if (exchanged.error || !exchanged.session) {
+        return NextResponse.json(
+          { error: exchanged.error || "Gagal menukar kode login Google." },
+          { status: 401 },
+        );
+      }
+      cookieStore.set(
+        CC_ACCESS_COOKIE,
+        exchanged.session.accessToken,
+        secureCookieOptions(60 * 60 * 24 * 7),
+      );
+      if (exchanged.session.refreshToken) {
+        cookieStore.set(
+          CC_REFRESH_COOKIE,
+          exchanged.session.refreshToken,
+          secureCookieOptions(60 * 60 * 24 * 30),
+        );
+      }
+      const { db } = await readSupabaseWorkspace(exchanged.session, createInitialDb());
+      recomputeGoalAmounts(db);
+      return NextResponse.json({ state: toPublicState(db) });
     }
 
     if (body.action === "session_from_tokens") {

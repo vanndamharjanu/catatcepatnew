@@ -11,6 +11,7 @@ import type {
 
 export const CC_ACCESS_COOKIE = "cc_sb_access";
 export const CC_REFRESH_COOKIE = "cc_sb_refresh";
+export const INITIAL_TX_PAGE_SIZE = 500;
 
 export interface SupabaseConfig {
   url: string;
@@ -575,7 +576,7 @@ export async function readSupabaseWorkspace(
     sbRestFetch(
       cfg,
       session.accessToken,
-      `transactions?${wFilter}&select=id,date,type,category,account_id,to_account_id,amount,note,goal_id,source,sheet_sync_status,created_at,updated_at&order=date.desc,created_at.desc`,
+      `transactions?${wFilter}&select=id,date,type,category,account_id,to_account_id,amount,note,goal_id,source,sheet_sync_status,created_at,updated_at&order=date.desc,created_at.desc&limit=${INITIAL_TX_PAGE_SIZE + 1}`,
     ),
     sbRestFetch(
       cfg,
@@ -682,7 +683,7 @@ export async function readSupabaseWorkspace(
       deadline: g.deadline || undefined,
       createdAt: g.created_at,
     })),
-    transactions: txRows.map((t) => ({
+    transactions: txRows.slice(0, INITIAL_TX_PAGE_SIZE).map((t) => ({
       id: t.id,
       date: t.date,
       type: t.type,
@@ -697,6 +698,7 @@ export async function readSupabaseWorkspace(
       createdAt: t.created_at,
       updatedAt: t.updated_at,
     })),
+    hasMoreTransactions: txRows.length > INITIAL_TX_PAGE_SIZE,
     sheetConnection,
     auth: {
       configured: true,
@@ -911,4 +913,256 @@ export async function writeSupabaseWorkspaceDelta(
       },
     );
   }
+}
+
+/** Exchange OAuth 2.0 PKCE authorization code + verifier for a Supabase session (#10). */
+export async function exchangeSupabasePkceCode(
+  authCode: string,
+  codeVerifier: string,
+): Promise<{ session?: SupabaseSession; error?: string }> {
+  const cfg = getSupabaseConfig();
+  if (!cfg) {
+    return { error: "Supabase belum dikonfigurasi." };
+  }
+  try {
+    const res = await fetch(`${cfg.url}/auth/v1/token?grant_type=pkce`, {
+      method: "POST",
+      headers: {
+        apikey: cfg.anonKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        auth_code: authCode.trim(),
+        code_verifier: codeVerifier.trim(),
+      }),
+      cache: "no-store",
+    });
+    const rawText = await res.text();
+    if (!res.ok) {
+      return { error: parseSupabaseAuthError(rawText, "Gagal memverifikasi kode login Google (PKCE).") };
+    }
+    const data = JSON.parse(rawText) as {
+      access_token?: string;
+      refresh_token?: string;
+      user?: { id?: string; email?: string };
+    };
+    if (!data.access_token || !data.user?.id) {
+      return { error: "Respons sesi PKCE Supabase tidak lengkap." };
+    }
+    return {
+      session: {
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token || "",
+        user: {
+          id: data.user.id,
+          email: data.user.email || "",
+        },
+      },
+    };
+  } catch {
+    return { error: "Gagal menghubungi server Supabase Auth (PKCE)." };
+  }
+}
+
+async function resolveWorkspaceIdForUser(
+  cfg: SupabaseConfig,
+  session: SupabaseSession,
+): Promise<string | null> {
+  const res = await sbRestFetch(
+    cfg,
+    session.accessToken,
+    `workspaces?owner_id=eq.${encodeURIComponent(session.user.id)}&select=id&limit=1`,
+  );
+  const rows = (await res.json()) as Array<{ id: string }>;
+  return rows[0]?.id ?? null;
+}
+
+/** Direct per-row INSERT into public.transactions without reading or diffing full history (#9). */
+export async function insertSupabaseTransactionsDirect(
+  session: SupabaseSession,
+  transactions: Transaction[],
+): Promise<boolean> {
+  const cfg = getSupabaseConfig();
+  if (!cfg || transactions.length === 0) return false;
+  const workspaceId = await resolveWorkspaceIdForUser(cfg, session);
+  if (!workspaceId) return false;
+
+  await sbRestFetch(
+    cfg,
+    session.accessToken,
+    "transactions?on_conflict=workspace_id,id",
+    {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify(
+        transactions.map((t) => ({
+          workspace_id: workspaceId,
+          id: t.id,
+          date: t.date,
+          type: t.type,
+          category: t.category,
+          account_id: t.accountId,
+          to_account_id: t.toAccountId || null,
+          amount: t.amount,
+          note: t.note || "",
+          goal_id: t.goalId || null,
+          source: t.source || "manual",
+          sheet_sync_status: t.sheetSyncStatus || "local_only",
+          created_at: t.createdAt,
+          updated_at: t.updatedAt,
+        })),
+      ),
+    },
+  );
+  return true;
+}
+
+/** Direct single-row PATCH on public.transactions without full-history read/diff (#9). */
+export async function updateSupabaseTransactionDirect(
+  session: SupabaseSession,
+  txId: string,
+  updates: {
+    date: string;
+    type: Transaction["type"];
+    category: string;
+    accountId: string;
+    toAccountId?: string;
+    amount: number;
+    note: string;
+    sheetSyncStatus: Transaction["sheetSyncStatus"];
+    updatedAt: string;
+  },
+): Promise<boolean> {
+  const cfg = getSupabaseConfig();
+  if (!cfg) return false;
+  const workspaceId = await resolveWorkspaceIdForUser(cfg, session);
+  if (!workspaceId) return false;
+
+  const res = await sbRestFetch(
+    cfg,
+    session.accessToken,
+    `transactions?workspace_id=eq.${encodeURIComponent(workspaceId)}&id=eq.${encodeURIComponent(txId)}`,
+    {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({
+        date: updates.date,
+        type: updates.type,
+        category: updates.category,
+        account_id: updates.accountId,
+        to_account_id: updates.toAccountId || null,
+        amount: updates.amount,
+        note: updates.note || "",
+        sheet_sync_status: updates.sheetSyncStatus,
+        updated_at: updates.updatedAt,
+      }),
+    },
+  );
+  const rows = (await res.json()) as Array<{ id: string }>;
+  return rows.length > 0;
+}
+
+/** Direct single-row DELETE on public.transactions + direct pending_deletes append (#9). */
+export async function deleteSupabaseTransactionDirect(
+  session: SupabaseSession,
+  txId: string,
+): Promise<boolean> {
+  const cfg = getSupabaseConfig();
+  if (!cfg) return false;
+  const workspaceId = await resolveWorkspaceIdForUser(cfg, session);
+  if (!workspaceId) return false;
+
+  const wFilter = `workspace_id=eq.${encodeURIComponent(workspaceId)}`;
+  const delRes = await sbRestFetch(
+    cfg,
+    session.accessToken,
+    `transactions?${wFilter}&id=eq.${encodeURIComponent(txId)}`,
+    {
+      method: "DELETE",
+      headers: { Prefer: "return=representation" },
+    },
+  );
+  const deletedRows = (await delRes.json()) as Array<{ id: string }>;
+  if (deletedRows.length === 0) return false;
+
+  const sheetRes = await sbRestFetch(
+    cfg,
+    session.accessToken,
+    `google_sheet_connections?${wFilter}&select=connected,pending_deletes&limit=1`,
+  );
+  const sheetRows = (await sheetRes.json()) as Array<{
+    connected: boolean;
+    pending_deletes?: string[] | null;
+  }>;
+  if (sheetRows[0]?.connected) {
+    const nextDeletes = Array.from(new Set([...(sheetRows[0].pending_deletes ?? []), txId]));
+    await sbRestFetch(
+      cfg,
+      session.accessToken,
+      `google_sheet_connections?${wFilter}`,
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({
+          pending_deletes: nextDeletes,
+          updated_at: new Date().toISOString(),
+        }),
+      },
+    );
+  }
+  return true;
+}
+
+/** Paginated lazy-load of older transactions from Supabase (#16). */
+export async function readSupabaseTransactionsPage(
+  session: SupabaseSession,
+  offset: number,
+  limit: number = INITIAL_TX_PAGE_SIZE,
+): Promise<{ transactions: Transaction[]; hasMore: boolean }> {
+  const cfg = getSupabaseConfig();
+  if (!cfg) return { transactions: [], hasMore: false };
+  const workspaceId = await resolveWorkspaceIdForUser(cfg, session);
+  if (!workspaceId) return { transactions: [], hasMore: false };
+
+  const safeOffset = Math.max(0, Math.round(offset));
+  const safeLimit = Math.min(1000, Math.max(1, Math.round(limit)));
+  const res = await sbRestFetch(
+    cfg,
+    session.accessToken,
+    `transactions?workspace_id=eq.${encodeURIComponent(workspaceId)}&select=id,date,type,category,account_id,to_account_id,amount,note,goal_id,source,sheet_sync_status,created_at,updated_at&order=date.desc,created_at.desc&offset=${safeOffset}&limit=${safeLimit + 1}`,
+  );
+  const rows = (await res.json()) as Array<{
+    id: string;
+    date: string;
+    type: Transaction["type"];
+    category: string;
+    account_id: string;
+    to_account_id?: string | null;
+    amount: number;
+    note: string;
+    goal_id?: string | null;
+    source: Transaction["source"];
+    sheet_sync_status: Transaction["sheetSyncStatus"];
+    created_at: string;
+    updated_at: string;
+  }>;
+
+  return {
+    transactions: rows.slice(0, safeLimit).map((t) => ({
+      id: t.id,
+      date: t.date,
+      type: t.type,
+      category: t.category,
+      accountId: t.account_id,
+      toAccountId: t.to_account_id || undefined,
+      amount: Number(t.amount),
+      note: t.note || "",
+      goalId: t.goal_id || undefined,
+      source: t.source || "manual",
+      sheetSyncStatus: t.sheet_sync_status || "local_only",
+      createdAt: t.created_at,
+      updatedAt: t.updated_at,
+    })),
+    hasMore: rows.length > safeLimit,
+  };
 }

@@ -5,10 +5,14 @@ import { randomUUID } from "node:crypto";
 import { CATEGORY_ICON_OPTIONS, type AccountKind, type AppDatabase, type CategoryItem, type Transaction } from "./types.ts";
 import { toIsoDate } from "./finance.ts";
 import {
+  deleteSupabaseTransactionDirect,
   getActiveSessionFromCookies,
+  insertSupabaseTransactionsDirect,
   isSupabaseConfigured,
+  readSupabaseTransactionsPage,
   readSupabaseWorkspace,
   type SupabaseSession,
+  updateSupabaseTransactionDirect,
   writeSupabaseWorkspaceDelta,
 } from "./supabase.ts";
 
@@ -409,6 +413,103 @@ export async function writeAsyncDb(db: AppDatabase): Promise<void> {
     return;
   }
   writeDb(db);
+}
+
+/** Direct per-row insert into transactions table without diffing full transaction history (#9). */
+export async function insertTransactionsDirect(
+  db: AppDatabase,
+  created: Transaction[],
+): Promise<void> {
+  db.transactions = [...created, ...db.transactions];
+  recomputeGoalAmounts(db);
+  const tracked = supabaseContextMap.get(db);
+  if (tracked) {
+    await insertSupabaseTransactionsDirect(tracked.session, created);
+    tracked.baseline = structuredClone(db);
+    return;
+  }
+  writeDb(db);
+}
+
+/** Direct single-row update on transactions table without diffing full history (#9). */
+export async function updateTransactionDirect(
+  db: AppDatabase,
+  txId: string,
+  updates: {
+    date: string;
+    type: Transaction["type"];
+    category: string;
+    accountId: string;
+    toAccountId?: string;
+    amount: number;
+    note: string;
+    sheetSyncStatus: Transaction["sheetSyncStatus"];
+    updatedAt: string;
+  },
+): Promise<boolean> {
+  const idx = db.transactions.findIndex((t) => t.id === txId);
+  if (idx !== -1) {
+    db.transactions[idx] = {
+      ...db.transactions[idx],
+      ...updates,
+    };
+  }
+  recomputeGoalAmounts(db);
+  const tracked = supabaseContextMap.get(db);
+  if (tracked) {
+    const ok = await updateSupabaseTransactionDirect(tracked.session, txId, updates);
+    tracked.baseline = structuredClone(db);
+    return ok || idx !== -1;
+  }
+  if (idx === -1) return false;
+  writeDb(db);
+  return true;
+}
+
+/** Direct single-row delete on transactions table without diffing full history (#9). */
+export async function deleteTransactionDirect(
+  db: AppDatabase,
+  txId: string,
+): Promise<boolean> {
+  const beforeLen = db.transactions.length;
+  db.transactions = db.transactions.filter((t) => t.id !== txId);
+  const existedInMemory = db.transactions.length !== beforeLen;
+  if (db.sheetConnection.connected) {
+    db.sheetConnection.pendingDeletes = Array.from(
+      new Set([...(db.sheetConnection.pendingDeletes ?? []), txId]),
+    );
+  }
+  recomputeGoalAmounts(db);
+  const tracked = supabaseContextMap.get(db);
+  if (tracked) {
+    const ok = await deleteSupabaseTransactionDirect(tracked.session, txId);
+    tracked.baseline = structuredClone(db);
+    return ok || existedInMemory;
+  }
+  if (!existedInMemory) return false;
+  writeDb(db);
+  return true;
+}
+
+/** Fetch older paginated transactions slice (#16). */
+export async function readTransactionsPageAsync(
+  offset: number,
+  limit = 500,
+): Promise<{ transactions: Transaction[]; hasMore: boolean; unauthenticated?: boolean }> {
+  if (isSupabaseConfigured()) {
+    const session = await getActiveSessionFromCookies();
+    if (!session) {
+      return { transactions: [], hasMore: false, unauthenticated: true };
+    }
+    return readSupabaseTransactionsPage(session, offset, limit);
+  }
+  const db = readDb();
+  const safeOffset = Math.max(0, Math.round(offset));
+  const safeLimit = Math.min(1000, Math.max(1, Math.round(limit)));
+  return {
+    transactions: db.transactions.slice(safeOffset, safeOffset + safeLimit),
+    hasMore: db.transactions.length > safeOffset + safeLimit,
+  };
 }
 
 /** Explicitly load sample simulation transactions when user requests a demo preview. */

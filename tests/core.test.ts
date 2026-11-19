@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import {
   buildGuriContextSummary,
   formatAiErrorMessage,
@@ -22,7 +23,12 @@ import {
   SHEET_HEADERS,
   transactionToSheetRow,
 } from "../src/lib/google-sheets.ts";
-import { checkRateLimit, constantTimeEqual, sanitizeSpreadsheetCell } from "../src/lib/security.ts";
+import {
+  checkRateLimit,
+  constantTimeEqual,
+  createPkcePair,
+  sanitizeSpreadsheetCell,
+} from "../src/lib/security.ts";
 import { computeDbDiff } from "../src/lib/supabase.ts";
 import {
   addAccountInDb,
@@ -497,7 +503,17 @@ function runTests() {
   assert.equal(allowance31.cycleStart, "2026-10-31");
   assert.equal(allowance31.cycleEnd, "2026-11-29");
 
-  console.log("ALL CORE TESTS PASSED (23/23)");
+  // 24. PKCE S256 pair generates valid base64url verifier and matching SHA-256 challenge
+  const pkce = createPkcePair();
+  assert.ok(pkce.verifier.length >= 43);
+  assert.equal(/^[A-Za-z0-9_-]+$/.test(pkce.verifier), true);
+  assert.equal(/^[A-Za-z0-9_-]+$/.test(pkce.challenge), true);
+  const expectedChallenge = createHash("sha256")
+    .update(pkce.verifier)
+    .digest("base64url");
+  assert.equal(pkce.challenge, expectedChallenge);
+
+  console.log("ALL CORE TESTS PASSED (24/24)");
 }
 
 runTests();

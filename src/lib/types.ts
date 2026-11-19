@@ -151,6 +151,7 @@ export interface AppDatabase {
   categories: CategoryItem[];
   goals: SavingGoal[];
   transactions: Transaction[];
+  hasMoreTransactions?: boolean;
   sheetConnection: SheetConnection;
   auth?: AuthStatus;
 }
