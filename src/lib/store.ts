@@ -302,7 +302,7 @@ export function createInitialDb(): AppDatabase {
     settings: {
       name: "Keuangan Pribadi",
       monthlyBudget: 3_000_000,
-      paydayDay: 25,
+      paydayDay: 1,
       plan: "free",
       categoryPreset: "umum",
       aiCreditsRemaining: 20,

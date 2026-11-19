@@ -150,8 +150,15 @@ export async function PATCH(request: Request) {
     if (typeof body.monthlyBudget === "number" && body.monthlyBudget >= 0) {
       db.settings.monthlyBudget = Math.round(body.monthlyBudget);
     }
-    if (typeof body.paydayDay === "number" && body.paydayDay >= 1 && body.paydayDay <= 28) {
-      db.settings.paydayDay = Math.round(body.paydayDay);
+    if (body.paydayDay !== undefined) {
+      const parsedDay = Math.round(Number(body.paydayDay));
+      if (!Number.isFinite(parsedDay) || parsedDay < 1 || parsedDay > 31) {
+        return NextResponse.json(
+          { error: "Tanggal gajian harus antara 1 sampai 31." },
+          { status: 400 },
+        );
+      }
+      db.settings.paydayDay = parsedDay;
     }
     if (typeof body.name === "string" && body.name.trim()) {
       db.settings.name = body.name.trim().slice(0, 60);

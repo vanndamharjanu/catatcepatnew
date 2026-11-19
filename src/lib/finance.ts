@@ -73,20 +73,36 @@ export function computeDailyAllowance(
   const year = now.getFullYear();
   const month = now.getMonth();
 
-  // Determine active cycle window based on paydayDay (e.g., 25th to 24th next month, or calendar month if payday=1)
-  const clampedPayday = Math.min(Math.max(paydayDay, 1), 28);
+  // Determine active cycle window based on paydayDay (1..31, clamped to each month's actual length)
+  const clampedPayday = Math.min(Math.max(Math.round(paydayDay) || 1, 1), 31);
+  const daysInMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
+  const paydayOnMonth = (y: number, m: number, d: number) =>
+    new Date(y, m, Math.min(d, daysInMonth(y, m)));
+
   let cycleStartDate: Date;
   let cycleEndDate: Date;
 
   if (clampedPayday === 1) {
     cycleStartDate = new Date(year, month, 1);
     cycleEndDate = new Date(year, month + 1, 0);
-  } else if (currentDay >= clampedPayday) {
-    cycleStartDate = new Date(year, month, clampedPayday);
-    cycleEndDate = new Date(year, month + 1, clampedPayday - 1);
   } else {
-    cycleStartDate = new Date(year, month - 1, clampedPayday);
-    cycleEndDate = new Date(year, month, clampedPayday - 1);
+    const thisMonthPayday = paydayOnMonth(year, month, clampedPayday);
+    if (currentDay >= thisMonthPayday.getDate()) {
+      cycleStartDate = thisMonthPayday;
+      const nextPayday = paydayOnMonth(year, month + 1, clampedPayday);
+      cycleEndDate = new Date(
+        nextPayday.getFullYear(),
+        nextPayday.getMonth(),
+        nextPayday.getDate() - 1,
+      );
+    } else {
+      cycleStartDate = paydayOnMonth(year, month - 1, clampedPayday);
+      cycleEndDate = new Date(
+        thisMonthPayday.getFullYear(),
+        thisMonthPayday.getMonth(),
+        thisMonthPayday.getDate() - 1,
+      );
+    }
   }
 
   const cycleStartIso = toIsoDate(cycleStartDate);

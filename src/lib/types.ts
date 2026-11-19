@@ -133,7 +133,7 @@ export interface RecurringTemplate {
   category: string;
   accountId: string;
   amount: number;
-  dayOfMonth: number; // 1..28
+  dayOfMonth: number; // 1..31
   lastRecordedMonth?: string; // YYYY-MM
 }
 

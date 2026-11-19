@@ -138,7 +138,7 @@ export function AppClient({ initialDb }: AppClientProps) {
   const [recCategory, setRecCategory] = useState("Listrik & Air");
   const [recAccountId, setRecAccountId] = useState(initialDb.accounts[0]?.id || "acc-cash");
   const [recAmountRaw, setRecAmountRaw] = useState("");
-  const [recDay, setRecDay] = useState("25");
+  const [recDay, setRecDay] = useState("1");
   const [budgetCatName, setBudgetCatName] = useState("Makan & Minum");
   const [budgetCatCapRaw, setBudgetCatCapRaw] = useState("");
 
@@ -1285,7 +1285,11 @@ export function AppClient({ initialDb }: AppClientProps) {
       showToast("Isi nama dan nominal jadwal rutin terlebih dahulu.");
       return;
     }
-    const day = Math.min(28, Math.max(1, parseInt(recDay, 10) || 1));
+    const day = parseInt(recDay, 10);
+    if (!day || day < 1 || day > 31) {
+      showToast("Tanggal rutin harus antara 1 sampai 31.");
+      return;
+    }
     const item: RecurringTemplate = {
       id: `rec-${Date.now()}`,
       name: cleanName,
@@ -1298,6 +1302,7 @@ export function AppClient({ initialDb }: AppClientProps) {
     updateExtras((prev) => ({ ...prev, recurring: [...prev.recurring, item] }));
     setRecName("");
     setRecAmountRaw("");
+    setRecDay("1");
     showToast(`Jadwal rutin "${cleanName}" disimpan.`);
   };
 
@@ -2536,15 +2541,26 @@ export function AppClient({ initialDb }: AppClientProps) {
                         htmlFor="rec-day"
                         className="mb-1 block text-[11px] font-bold text-[var(--text-muted)]"
                       >
-                        Tgl (1-28)
+                        Tgl (1-31)
                       </label>
                       <input
                         id="rec-day"
                         type="number"
+                        inputMode="numeric"
                         min={1}
-                        max={28}
+                        max={31}
                         value={recDay}
-                        onChange={(e) => setRecDay(e.target.value)}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/\D/g, "");
+                          if (!raw) {
+                            setRecDay("");
+                            return;
+                          }
+                          const num = parseInt(raw, 10);
+                          if (num >= 1 && num <= 31) {
+                            setRecDay(String(num));
+                          }
+                        }}
                         className="min-h-[40px] w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2 text-center text-xs font-bold text-[var(--text-primary)] tabular-nums"
                       />
                     </div>

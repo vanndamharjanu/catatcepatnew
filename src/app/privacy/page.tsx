@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { HomeIcon } from "@/components/Icons";
 import { OctopusMascot } from "@/components/OctopusMascot";
 import { APP_SLOGAN } from "@/lib/types";
 
@@ -12,25 +13,30 @@ export const metadata: Metadata = {
 export default function PrivacyPage() {
   return (
     <div className="min-h-app bg-[var(--bg-canvas)] text-[var(--text-primary)]">
-      <header className="border-b border-[var(--border-subtle)] bg-[var(--bg-card)] px-4 py-3.5 sm:px-8">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3">
-          <Link href="/" className="flex min-h-[44px] items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--brand-primary)] text-white">
-              <OctopusMascot mood="saving" size={34} />
+      <header className="border-b border-[var(--border-subtle)] bg-[var(--bg-card)] px-4 py-3 sm:px-8">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-2.5">
+          <Link href="/" className="flex min-h-[44px] min-w-0 items-center gap-2.5 sm:gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-soft)] sm:h-10 sm:w-10">
+              <OctopusMascot mood="saving" size={32} />
             </span>
-            <div>
-              <span className="block text-base font-extrabold text-[var(--text-primary)]">
+            <div className="min-w-0">
+              <span className="block truncate text-sm font-extrabold text-[var(--text-primary)] sm:text-base">
                 CatatCepat
               </span>
-              <span className="block text-xs text-[var(--text-muted)]">{APP_SLOGAN}</span>
+              <span className="block truncate text-[11px] text-[var(--text-muted)] sm:text-xs">
+                {APP_SLOGAN}
+              </span>
             </div>
           </Link>
 
           <Link
             href="/"
-            className="flex min-h-[44px] items-center rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-4 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)]"
+            aria-label="Kembali ke Beranda"
+            title="Kembali ke Beranda"
+            className="flex min-h-[40px] min-w-[40px] shrink-0 items-center justify-center rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-soft)] sm:min-h-[42px] sm:px-3.5"
           >
-            Kembali ke Beranda
+            <HomeIcon className="h-4 w-4 shrink-0" />
+            <span className="ml-1.5 hidden sm:inline">Kembali ke Beranda</span>
           </Link>
         </div>
       </header>
@@ -175,9 +181,9 @@ export default function PrivacyPage() {
       </main>
 
       <footer className="border-t border-[var(--border-subtle)] bg-[var(--bg-card)] px-4 py-6 text-center text-xs text-[var(--text-muted)] sm:px-8">
-        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3">
+        <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-center gap-2.5 text-center">
           <span>CatatCepat · {APP_SLOGAN}</span>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center justify-center gap-4">
             <Link href="/privacy" className="font-bold text-[var(--text-primary)] underline">
               Kebijakan Privasi
             </Link>

@@ -491,7 +491,13 @@ function runTests() {
   assert.equal(multiDecimal[0].amount, 2_500);
   assert.equal(multiDecimal[1].amount, 15_500);
 
-  console.log("ALL CORE TESTS PASSED (22/22)");
+  // 23. Default paydayDay is 1 and range 1..31 clamps safely to shorter months (e.g. Nov 30)
+  assert.equal(createInitialDb().settings.paydayDay, 1);
+  const allowance31 = computeDailyAllowance(txs, 3_000_000, 31, now); // Nov 17, 2026 (Oct 31 .. Nov 29)
+  assert.equal(allowance31.cycleStart, "2026-10-31");
+  assert.equal(allowance31.cycleEnd, "2026-11-29");
+
+  console.log("ALL CORE TESTS PASSED (23/23)");
 }
 
 runTests();

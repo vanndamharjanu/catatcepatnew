@@ -651,7 +651,7 @@ export async function readSupabaseWorkspace(
     settings: {
       name: ws.name || "Keuangan Pribadi",
       monthlyBudget: Number(ws.monthly_budget ?? 3_000_000),
-      paydayDay: Number(ws.payday_day ?? 25),
+      paydayDay: Number(ws.payday_day ?? 1),
       plan: ws.plan || "free",
       categoryPreset: ws.category_preset || "asn_karyawan",
       aiCreditsRemaining: Number(ws.ai_credits_remaining ?? 20),

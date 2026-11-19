@@ -232,9 +232,6 @@ export function LandingPage({
             <a href="#sheets" className="hover:text-[var(--text-primary)]">
               Google Sheets
             </a>
-            <Link href="/privacy" className="hover:text-[var(--text-primary)]">
-              Privasi
-            </Link>
           </nav>
 
           <div className="flex shrink-0 items-center gap-2">
@@ -654,8 +651,8 @@ export function LandingPage({
         </div>
       </main>
 
-      <footer className="border-t border-[var(--border-subtle)] bg-[var(--bg-card)] px-4 py-6 sm:px-8">
-        <div className="mx-auto flex w-full max-w-6xl flex-col items-center gap-3 text-center text-xs text-[var(--text-muted)] sm:flex-row sm:justify-between sm:text-left">
+      <footer className="border-t border-[var(--border-subtle)] bg-[var(--bg-card)] px-4 py-6 text-center sm:px-8">
+        <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-center gap-2.5 text-center text-xs text-[var(--text-muted)]">
           <div>
             <span className="font-extrabold text-[var(--text-primary)]">
               CatatCepat

@@ -9,7 +9,7 @@ create table if not exists public.workspaces (
   owner_id uuid not null unique,
   name text not null default 'Keuangan Pribadi',
   monthly_budget bigint not null default 3000000 check (monthly_budget >= 0),
-  payday_day smallint not null default 25 check (payday_day between 1 and 31),
+  payday_day smallint not null default 1 check (payday_day between 1 and 31),
   plan text not null default 'free' check (plan in ('free', 'pro')),
   category_preset text not null default 'asn_karyawan' check (category_preset in ('umum', 'asn_karyawan', 'mahasiswa', 'freelancer')),
   ai_credits_remaining integer not null default 20,
