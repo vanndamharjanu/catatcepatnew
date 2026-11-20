@@ -105,7 +105,9 @@ export function SheetsDrawer({
 
   const handleTogglePush = async () => {
     if (isDemoMode) {
-      onNotify("Masuk dengan akun Google/Email untuk mengaktifkan notifikasi PWA.");
+      onNotify(
+        "Masuk dengan akun Google/Email untuk mengaktifkan notifikasi PWA.",
+      );
       return;
     }
     if (
@@ -796,10 +798,11 @@ export function SheetsDrawer({
                 <div className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-3.5">
                   <div className="min-w-0">
                     <span className="block text-xs font-bold text-[var(--text-primary)]">
-                      Pengingat Jadwal Rutin (PWA Push)
+                      Pengingat Jadwal Rutin
                     </span>
                     <span className="mt-0.5 block text-[11px] text-[var(--text-muted)]">
-                      Kirim pengingat tiap pagi saat ada tagihan/gaji jatuh tempo.
+                      Kirim pengingat tiap pagi saat ada tagihan/gaji jatuh
+                      tempo.
                     </span>
                   </div>
                   <button
